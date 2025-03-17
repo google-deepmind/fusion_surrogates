@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fusion_transport_surrogates"
+name = "fusion_surrogates"
 description = "Transport surrogate models for Tokamak fusion."
 version = "0.1.0"
 readme = "README.md"
@@ -34,4 +34,4 @@ testing = [
 
 
 [tool.setuptools.packages.find]
-include = ["fusion_transport_surrogates*"]
+include = ["fusion_surrogates*"]

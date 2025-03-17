@@ -55,41 +55,41 @@ pip install virtualenv
 ```
 
 Create a code directory where you will install the virtual env and other
-fusion_transport_surrogates dependencies.
+fusion_surrogates dependencies.
 
 ```shell
-mkdir /path/to/fusion_transport_surrogates_dir && cd "$_"
+mkdir /path/to/fusion_surrogates_dir && cd "$_"
 ```
-Where `/path/to/fusion_transport_surrogates_dir` should be replaced by a path
+Where `/path/to/fusion_surrogates_dir` should be replaced by a path
 of your choice.
 
 Create a fusion_transport_suurrogates virtual env:
 
 ```shell
-python3 -m venv fusion_transport_surrogates_venv
+python3 -m venv fusion_surrogates_venv
 ```
 
 Activate the virtual env:
 
 ```shell
-source fusion_transport_surrogates_venv/bin/activate
+source fusion_surrogates_venv/bin/activate
 ```
 
 Download and install the library via http:
 
 ```shell
-git clone https://github.com/google-deepmind/fusion_transport_surrogates.git
+git clone https://github.com/google-deepmind/fusion_surrogates.git
 ```
 or ssh (ensure that you have the appropriate SSH key uploaded to github).
 
 ```shell
-git clone git@github.com:google-deepmind/fusion_transport_surrogates.git
+git clone git@github.com:google-deepmind/fusion_surrogates.git
 ```
 
-Enter the fusion_transport_surrogates directory
+Enter the fusion_surrogates directory
 
 ```shell
-cd fusion_transport_surrogates
+cd fusion_surrogates
 ```
 
 Install the library:

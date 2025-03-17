@@ -14,7 +14,7 @@
 
 from absl.testing import absltest
 import flax.linen as nn
-from fusion_transport_surrogates import networks
+from fusion_surrogates import networks
 import jax
 import jax.numpy as jnp
 

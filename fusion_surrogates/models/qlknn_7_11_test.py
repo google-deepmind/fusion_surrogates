@@ -18,7 +18,7 @@ import os
 
 from absl.testing import absltest
 from absl.testing import parameterized
-from fusion_transport_surrogates import qlknn_model
+from fusion_surrogates import qlknn_model
 import jax
 import jax.numpy as jnp
 import numpy as np

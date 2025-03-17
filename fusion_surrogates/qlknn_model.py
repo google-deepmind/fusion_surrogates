@@ -28,7 +28,7 @@ from absl import logging
 from flax import serialization
 from flax import typing as flax_typing
 import flax.linen as nn
-from fusion_transport_surrogates import networks
+from fusion_surrogates import networks
 import immutabledict
 import jax
 import jax.numpy as jnp
