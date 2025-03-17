@@ -1,9 +1,9 @@
-# Fusion transport surrogates
+# Fusion surrogates
 
-A library of surrogate transport models for tokamak fusion.
+A library of surrogate models for tokamak fusion.
 
 This library provides both inference code and model weights and metadata. It is
-designed to provide surrogate transport models for
+designed to provide surrogate models for
 [TORAX](https://github.com/google-deepmind/torax), but
 the models should be usable by other fusion simulators.
 
@@ -63,7 +63,7 @@ mkdir /path/to/fusion_surrogates_dir && cd "$_"
 Where `/path/to/fusion_surrogates_dir` should be replaced by a path
 of your choice.
 
-Create a fusion_transport_suurrogates virtual env:
+Create a fusion_surrogates virtual env:
 
 ```shell
 python3 -m venv fusion_surrogates_venv
