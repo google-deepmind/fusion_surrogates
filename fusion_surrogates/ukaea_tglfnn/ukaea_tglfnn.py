@@ -33,11 +33,10 @@ OUTPUT_LABELS: Final[list[str]] = ["efe_gb", "efi_gb", "pfi_gb"]
 @dataclasses.dataclass
 class TGLFNNModelConfig:
     n_ensemble: int
-    hidden_size: int
     num_hiddens: int
     dropout: float
-    normalize: bool
-    unnormalize: bool
+    normalize: bool = True
+    unnormalize: bool = True
     hidden_size: int = 512
 
     @classmethod
@@ -49,8 +48,6 @@ class TGLFNNModelConfig:
             n_ensemble=config["num_estimators"],
             num_hiddens=config["model_size"],
             dropout=config["dropout"],
-            normalize=config["scale"],
-            unnormalize=config["denormalise"],
         )
 
 
@@ -88,8 +85,9 @@ class TGLFNNModel:
         self.network = GaussianMLPEnsemble(
             n_ensemble=config.n_ensemble,
             hidden_size=config.hidden_size,
-            n_hidden_layers=config.n_hidden_layers,
+            num_hiddens=config.num_hiddens,
             dropout=config.dropout,
+            activation="relu",
         )
 
     @classmethod
@@ -111,7 +109,7 @@ class TGLFNNModel:
             params = {}
             for i in range(config.n_ensemble):
                 model_dict = {}
-                for j in range(config.n_hidden_layers):
+                for j in range(config.num_hiddens):
                     layer_dict = {
                         "kernel": jnp.array(
                             pytorch_state_dict[f"models.{i}.model.{j*3}.weight"]
@@ -176,8 +174,51 @@ class TGLFNNModel:
         )
 
         if self.config.unnormalize:
-            output = unnormalize(
-                output, mean=self.stats.output_mean, stddev=self.stats.output_std
+            mean = output[..., 0]
+            var = output[..., 1]
+
+            unnormalized_mean = unnormalize(
+                mean, mean=self.stats.output_mean, stddev=self.stats.output_std
             )
 
+            output = jnp.stack([unnormalized_mean, var], axis=-1)
+
         return output
+
+
+class ONNXTGLFNNModel:
+    def __init__(
+        self,
+        efe_onnx_path: str,
+        efi_onnx_path: str,
+        pfi_onnx_path: str,
+    ) -> "TGLFNNModel":
+        import onnx
+        from jaxonnxruntime import config
+        from jaxonnxruntime.backend import Backend as ONNXJaxBackend
+
+        config.update("jaxort_only_allow_initializers_as_static_args", False)
+
+        self.models = {}
+        efe_model = onnx.load_model(efe_onnx_path)
+        self.models["efe_gb"] = ONNXJaxBackend.prepare(efe_model)
+
+        efi_model = onnx.load_model(efi_onnx_path)
+        self.models["efi_gb"] = ONNXJaxBackend.prepare(efi_model)
+
+        pfi_model = onnx.load_model(pfi_onnx_path)
+        self.models["pfi_gb"] = ONNXJaxBackend.prepare(pfi_model)
+
+        self._input_dtype = jnp.float32
+        self._input_node_label = "input"
+
+    def _predict_single_flux(self, flux: str, inputs: jax.Array) -> jax.Array:
+        output = self.models[flux].run(
+            {self._input_node_label: inputs.astype(self._input_dtype)}
+        )
+        return jnp.stack([jnp.squeeze(output[0]), jnp.squeeze(output[1])], axis=-1)
+
+    def predict(self, inputs: jax.Array):
+        return jnp.stack(
+            [self._predict_single_flux(f, inputs) for f in OUTPUT_LABELS], axis=-2
+        )
