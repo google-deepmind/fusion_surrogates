@@ -263,7 +263,7 @@ class QLKNNModel:
           mean=self._config.stats_data.input_mean,
           stddev=self._config.stats_data.input_stddev,
       )
-    return self._network.apply(params, inputs)
+    return self._network.apply(params, inputs).astype(jnp.float64)
 
   def predict_targets(self, inputs: jax.Array) -> jax.Array:
     """Predicts the targets given the inputs.
