@@ -28,13 +28,12 @@ from absl import logging
 from flax import serialization
 from flax import typing as flax_typing
 import flax.linen as nn
+from fusion_surrogates import networks
+from fusion_surrogates import transforms
 import immutabledict
 import jax
 import jax.numpy as jnp
 import optax
-
-from fusion_surrogates import networks
-from fusion_surrogates.utils import normalize, unnormalize
 
 # Internal import.
 # Internal import.
@@ -246,7 +245,7 @@ class QLKNNModel:
       the raw model prediction
     """
     if self._config.normalize_inputs and self._config.stats_data is not None:
-      inputs = normalize(
+      inputs = transforms.normalize(
           inputs,
           mean=self._config.stats_data.input_mean,
           stddev=self._config.stats_data.input_stddev,
@@ -269,7 +268,7 @@ class QLKNNModel:
         jax.tree_util.tree_map(lambda x: x[0], self._params), inputs
     )
     if self._config.normalize_targets and self._config.stats_data is not None:
-      outputs = unnormalize(
+      outputs = transforms.unnormalize(
           outputs,
           mean=self._config.stats_data.target_mean,
           stddev=self._config.stats_data.target_stddev,
