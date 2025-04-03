@@ -16,14 +16,12 @@ import jax.numpy as jnp
 from absl.testing import absltest
 from numpy import testing
 
-from fusion_surrogates.ukaea_tglfnn.ukaea_tglfnn import (
-    ONNXTGLFNNModel,
-    TGLFNNModel,
-)
+from fusion_surrogates.ukaea_tglfnn import pytorch_model
+from fusion_surrogates.ukaea_tglfnn import onnx_model
 
 
-class UKAEA_TGLFNNModelTest(absltest.TestCase):
-    model = TGLFNNModel.load_from_pytorch(
+class PyTorchTGLFNNModelTest(absltest.TestCase):
+    model = pytorch_model.PytorchTGLFNNModel(
         config_path="models/1.0.1/config.yaml",
         stats_path="models/1.0.1/stats.json",
         efe_gb_checkpoint_path="models/1.0.1/regressor_efe_gb.pt",
@@ -42,8 +40,8 @@ class UKAEA_TGLFNNModelTest(absltest.TestCase):
         )
 
 
-class UKAEA_ONNXTGLFNNModelTest(absltest.TestCase):
-    model = ONNXTGLFNNModel(
+class ONNXTGLFNNModelTest(absltest.TestCase):
+    model = onnx_model.ONNXTGLFNNModel(
         efe_onnx_path="models/1.0.1/regressor_efe_gb_onnx.onnx",
         efi_onnx_path="models/1.0.1/regressor_efi_gb_onnx.onnx",
         pfi_onnx_path="models/1.0.1/regressor_pfi_gb_onnx.onnx",
