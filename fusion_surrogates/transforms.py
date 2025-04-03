@@ -1,3 +1,5 @@
+"""Tools for transforming input and output tensors."""
+
 import jax
 import jax.numpy as jnp
 
