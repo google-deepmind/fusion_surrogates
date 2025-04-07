@@ -43,12 +43,13 @@ class QlknnModelTest(parameterized.TestCase):
     batch_dims = (1, 10)
     orig_model = qlknn_model_test_utils.init_model(config, batch_dims)
     with tempfile.NamedTemporaryFile() as f:
-      orig_model.export_model(f.name)
-      imported_model = qlknn_model.QLKNNModel.import_model(f.name)
+      orig_model.export_model(f.name, 'my_version')
+      imported_model = qlknn_model.QLKNNModel.load_model_from_path(f.name)
     inputs = jnp.empty(batch_dims + (orig_model.num_inputs,))
     orig_outputs = orig_model.predict_targets(inputs)
     imported_outputs = imported_model.predict_targets(inputs)
     testing.assert_array_equal(orig_outputs, imported_outputs)
+    self.assertEqual(imported_model.version, 'my_version')
 
   def test_predict(self):
     """Tests that predict outputs are computed from targets as expected."""
@@ -151,6 +152,14 @@ class QlknnModelTest(parameterized.TestCase):
     config.network_config = network_config
     model = qlknn_model.QLKNNModel(config=config)
     self.assertIsInstance(model.network, network_class)
+
+  def test_registry(self):
+    model = qlknn_model.QLKNNModel.load_model_from_name('qlknn_7_11_v1')
+    self.assertEqual(model.version, '11D')
+
+  def test_default_model(self):
+    model = qlknn_model.QLKNNModel.load_default_model()
+    self.assertEqual(model.version, '11D')
 
   def test_normalize(self):
     num_features = 20
