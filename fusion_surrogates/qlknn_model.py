@@ -29,6 +29,7 @@ from flax import serialization
 from flax import typing as flax_typing
 import flax.linen as nn
 from fusion_surrogates import networks
+from fusion_surrogates.models import registry
 import immutabledict
 import jax
 import jax.numpy as jnp
@@ -150,6 +151,15 @@ class QLKNNModelConfig:
     return serialization.msgpack_serialize(export_dict)
 
 
+@dataclasses.dataclass
+class QLKNNModelMetadata:
+  """Optional metadata for QLKNNModel. Useful to identify a model."""
+
+  path: str = ''
+  name: str = ''
+  version: str = ''
+
+
 def _inputs_and_ranges_from_config(
     config: QLKNNModelConfig,
 ) -> dict[str, dict[str, float]]:
@@ -173,13 +183,15 @@ class QLKNNModel:
       self,
       config: QLKNNModelConfig,
       params: optax.Params | None = None,
-      version: str = VERSION,
+      metadata: QLKNNModelMetadata | None = None,
   ):
-    self._version = version
     self._config = config
     self._inputs_and_ranges = _inputs_and_ranges_from_config(self._config)
     self._build_network()
     self._params = params
+    if metadata is None:
+      metadata = QLKNNModelMetadata()
+    self._metadata = metadata
 
   def init_params(
       self, batch_dims: tuple[int, ...], init_rng: flax_typing.PRNGKey
@@ -190,8 +202,16 @@ class QLKNNModel:
     )
 
   @property
+  def path(self) -> str:
+    return self._metadata.path
+
+  @property
+  def name(self) -> str | None:
+    return self._metadata.name
+
+  @property
   def version(self) -> str:
-    return self._version
+    return self._metadata.version
 
   @property
   def network(self) -> nn.Module:
@@ -349,9 +369,11 @@ class QLKNNModel:
         **network_kwargs
     )
 
-  def export_model(self, output_path: str) -> None:
+  def export_model(self, output_path: str, version: str | None = None) -> None:
+    if version is None:
+      version = VERSION
     export_dict = {
-        'version': VERSION,
+        'version': version,
         'config': self._config.serialize(),
         'params': self._params,
     }
@@ -359,16 +381,51 @@ class QLKNNModel:
       f.write(serialization.msgpack_serialize(export_dict))
 
   @classmethod
-  def import_model(
+  def load_model_from_name(
+      cls,
+      model_name: str,
+  ) -> 'QLKNNModel':
+    """Loads a QLKNNModel from a file."""
+    model_path = registry.MODELS.get(model_name)
+    if model_path is None:
+      raise ValueError(f'Model {model_name} not found in registry.')
+    return cls.load_model_from_path(model_path, model_name)
+
+  @classmethod
+  def load_model_from_path(
       cls,
       input_path: str,
+      model_name: str | None = None,
   ) -> 'QLKNNModel':
     """Loads a QLKNNModel from a file."""
     logging.info('Loading QLKNNModel from %s', input_path)
     with open(input_path, 'rb') as f:
       import_dict = serialization.msgpack_restore(f.read())
+    if model_name is None:
+      model_name = ''
     return cls(
         config=QLKNNModelConfig.deserialize(import_dict['config']),
         params=import_dict['params'],
-        version=import_dict['version'],
+        metadata=QLKNNModelMetadata(
+            path=input_path,
+            name=model_name,
+            version=import_dict['version'],
+        ),
     )
+
+  @classmethod
+  def load_default_model(cls) -> 'QLKNNModel':
+    """Loads the default QLKNNModel."""
+    return cls.load_model_from_name(registry.DEFAULT_MODEL_NAME)
+
+  # TODO(hamelphi): Remove this method once external dependencies are updated.
+  @classmethod
+  def import_model(
+      cls,
+      input_path: str,
+  ) -> 'QLKNNModel':
+    """Loads a QLKNNModel from a file."""
+    logging.warning(
+        'Deprecated method import_model. Use load_model_from_path instead.'
+    )
+    return cls.load_model_from_path(input_path)
