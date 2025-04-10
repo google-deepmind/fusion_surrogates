@@ -1,3 +1,0 @@
-This model was trained by combining data for the QLKNN11D dataset
-(https://zenodo.org/record/8017522) and QLKNN7D-edge dataset
-(https://zenodo.org/record/8106431).
