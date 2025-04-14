@@ -44,65 +44,43 @@ More details on the inputs and outputs mentioned above can be found in the
 
 ## Installation instructions
 
-Install virtualenv (if not already installed):
+### Virtual environment
+
+It is recommended to use a virtual environment to install `fusion_surrogates`.
+
+To install venv:
 
 ```shell
 pip install --upgrade pip
-```
-
-```shell
 pip install virtualenv
 ```
 
-Create a code directory where you will install the virtual env and other
-fusion_surrogates dependencies.
+To create and activate a `venv`:
 
-```shell
-mkdir /path/to/fusion_surrogates_dir && cd "$_"
-```
-Where `/path/to/fusion_surrogates_dir` should be replaced by a path
-of your choice.
-
-Create a fusion_surrogates virtual env:
-
-```shell
-python3 -m venv fusion_surrogates_venv
+``` shell
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-Activate the virtual env:
+Once you are done with your session, you can exit the `venv`:
 
 ```shell
-source fusion_surrogates_venv/bin/activate
+deactivate
 ```
 
-Download and install the library via http:
+### Installing the library
+
+To install the library:
 
 ```shell
-git clone https://github.com/google-deepmind/fusion_surrogates.git
-```
-or ssh (ensure that you have the appropriate SSH key uploaded to github).
-
-```shell
-git clone git@github.com:google-deepmind/fusion_surrogates.git
-```
-
-Enter the fusion_surrogates directory
-
-```shell
-cd fusion_surrogates
-```
-
-Install the library:
-
-```shell
-pip install -e .
+pip install fusion_surrogates
 ```
 
 If you want to run unit tests, install with the `testing` option:
 
 ```shell
 pip install -e .[testing]
-pytest
+pytest .venv/lib/python*/site-packages/fusion_surrogates
 ```
 
 ## Disclaimer
