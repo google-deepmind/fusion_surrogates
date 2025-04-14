@@ -18,8 +18,8 @@ import os
 
 from absl.testing import absltest
 from absl.testing import parameterized
-from fusion_surrogates import qlknn_model
-from fusion_surrogates.models import registry
+from fusion_surrogates.qlknn import qlknn_model
+from fusion_surrogates.qlknn.models import registry
 import jax
 import jax.numpy as jnp
 import numpy as np

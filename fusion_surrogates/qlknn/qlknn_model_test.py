@@ -16,9 +16,9 @@ import tempfile
 
 from absl.testing import absltest
 from absl.testing import parameterized
-from fusion_surrogates import networks
-from fusion_surrogates import qlknn_model
-from fusion_surrogates import qlknn_model_test_utils
+from fusion_surrogates.common import networks
+from fusion_surrogates.qlknn import qlknn_model
+from fusion_surrogates.qlknn import qlknn_model_test_utils
 import jax
 import jax.numpy as jnp
 from numpy import testing

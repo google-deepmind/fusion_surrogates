@@ -28,8 +28,8 @@ from absl import logging
 from flax import serialization
 from flax import typing as flax_typing
 import flax.linen as nn
-from fusion_surrogates import networks
-from fusion_surrogates.models import registry
+from fusion_surrogates.common import networks
+from fusion_surrogates.qlknn.models import registry
 import immutabledict
 import jax
 import jax.numpy as jnp

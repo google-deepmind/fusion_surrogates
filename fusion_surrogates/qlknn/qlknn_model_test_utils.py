@@ -14,8 +14,8 @@
 
 """Utils for qlknn_model tests."""
 
-from fusion_surrogates import networks
-from fusion_surrogates import qlknn_model
+from fusion_surrogates.common import networks
+from fusion_surrogates.qlknn import qlknn_model
 import jax
 
 
