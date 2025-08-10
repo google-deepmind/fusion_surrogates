@@ -1,0 +1,129 @@
+# Copyright 2024 DeepMind Technologies Limited.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Config classes for UKAEA's TGLFNN model."""
+
+import dataclasses
+import json
+import typing
+from pathlib import Path
+from typing import Final, Literal
+
+import jax
+import jax.numpy as jnp
+import optax
+import torch
+import yaml
+
+MEAN_OUTPUT_IDX: Final[int] = 0
+VAR_OUTPUT_IDX: Final[int] = 1
+
+OutputLabel = Literal["efe_gb", "efi_gb", "pfi_gb"]
+OUTPUT_LABELS = typing.get_args(OutputLabel)
+
+InputLabel = Literal[
+    "RLNS_1",
+    "RLTS_1",
+    "RLTS_2",
+    "TAUS_2",
+    "RMIN_LOC",
+    "DRMAJDX_LOC",
+    "Q_LOC",
+    # Note: SHAT is defined based on Q_PRIME_LOC, rather than from s-α geometry
+    "SHAT",
+    "XNUE",
+    "KAPPA_LOC",
+    "S_KAPPA_LOC",
+    "DELTA_LOC",
+    "S_DELTA_LOC",
+    "BETAE",
+    "ZEFF",
+]
+INPUT_LABELS = typing.get_args(InputLabel)
+
+
+@dataclasses.dataclass
+class TGLFNNukaeaModelConfig:
+    n_ensemble: int
+    num_hiddens: int
+    dropout: float
+    hidden_size: int
+    normalize: bool = True
+    unnormalize: bool = True
+    activation: str = "relu"
+
+    @classmethod
+    def load(cls, config_path: str):
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+
+        # Normalize and unnormalize are true for all current TGLFNNukaea models
+        # This does not appear in the config
+        return cls(
+            n_ensemble=config["num_estimators"],
+            num_hiddens=config["model_size"],
+            dropout=config["dropout"],
+            hidden_size=config["hidden_size"],
+        )
+
+
+@dataclasses.dataclass
+class TGLFNNukaeaModelStats:
+    input_mean: jax.Array
+    input_std: jax.Array
+    output_mean: jax.Array
+    output_std: jax.Array
+
+    @classmethod
+    def load(cls, stats_path: str):
+        with open(stats_path, "r") as f:
+            stats = json.load(f)
+
+        return cls(
+            input_mean=jnp.array([stats[label]["mean"] for label in INPUT_LABELS]),
+            input_std=jnp.array([stats[label]["std"] for label in INPUT_LABELS]),
+            output_mean=jnp.array([stats[label]["mean"] for label in OUTPUT_LABELS]),
+            output_std=jnp.array([stats[label]["std"] for label in OUTPUT_LABELS]),
+        )
+
+
+def params_from_pytorch_state_dict(
+    pytorch_state_dict: dict, config: TGLFNNukaeaModelConfig
+) -> optax.Params:
+    params = {}
+    for i in range(config.n_ensemble):
+        model_dict = {}
+        for j in range(config.num_hiddens):
+            layer_dict = {
+                "kernel": jnp.array(
+                    pytorch_state_dict[f"models.{i}.model.{j * 3}.weight"]
+                ).T,
+                "bias": jnp.array(
+                    pytorch_state_dict[f"models.{i}.model.{j * 3}.bias"]
+                ).T,
+            }
+            model_dict[f"Dense_{j}"] = layer_dict
+        params[f"GaussianMLP_{i}"] = model_dict
+    return {"params": params}
+
+
+def params_from_pt_file(
+    checkpoint_path: str | Path,
+    config: TGLFNNukaeaModelConfig,
+    map_location: str = "cpu",
+) -> optax.Params:
+    with open(checkpoint_path, "rb") as f:
+        return params_from_pytorch_state_dict(
+            torch.load(f, map_location=map_location), config
+        )
