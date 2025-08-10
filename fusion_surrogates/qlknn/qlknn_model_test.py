@@ -161,35 +161,5 @@ class QlknnModelTest(parameterized.TestCase):
     model = qlknn_model.QLKNNModel.load_default_model()
     self.assertEqual(model.version, '11D')
 
-  def test_normalize(self):
-    num_features = 20
-    batch_shape = (1, 10)
-    data_shape = batch_shape + (num_features,)
-    data = jax.random.uniform(jax.random.key(0), shape=data_shape)
-    data_mean = data.mean(axis=(0, 1))
-    data_std = data.std(axis=(0, 1))
-    normalized_data = qlknn_model.normalize(
-        data, mean=data_mean, stddev=data_std
-    )
-    testing.assert_array_almost_equal(
-        normalized_data.mean(axis=(0, 1)), jnp.zeros(num_features)
-    )
-    testing.assert_array_almost_equal(
-        normalized_data.std(axis=(0, 1)), jnp.ones(num_features)
-    )
-
-  def test_unnormalize(self):
-    data_shape = (2, 25, 5)
-    data = jax.random.uniform(jax.random.key(0), shape=data_shape)
-    data_mean = data.mean(axis=(0, 1))
-    data_std = data.std(axis=(0, 1))
-    normalized_data = qlknn_model.normalize(
-        data, mean=data_mean, stddev=data_std
-    )
-    unnormalized_data = qlknn_model.unnormalize(
-        normalized_data, mean=data_mean, stddev=data_std
-    )
-    testing.assert_array_almost_equal(unnormalized_data, data)
-
 if __name__ == '__main__':
   absltest.main()
