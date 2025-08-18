@@ -84,6 +84,10 @@ class TGLFNNukaeaModelConfig:
     def input_labels(self) -> list[str]:
         return INPUT_LABELS_DICT[self.machine]
 
+    @property
+    def output_labels(self) -> list[str]:
+        return OUTPUT_LABELS
+
     @classmethod
     def load(cls, machine: Machine, config_path: str):
         with open(config_path, "r") as f:
