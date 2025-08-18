@@ -59,17 +59,12 @@ class TGLFNNukaeaModelConfig:
     num_hiddens: int
     dropout: float
     hidden_size: int
-    normalize: bool = True
-    unnormalize: bool = True
-    activation: str = "relu"
 
     @classmethod
     def load(cls, config_path: str):
         with open(config_path, "r") as f:
             config = yaml.safe_load(f)
 
-        # Normalize and unnormalize are true for all current TGLFNNukaea models
-        # This does not appear in the config
         return cls(
             n_ensemble=config["num_estimators"],
             num_hiddens=config["model_size"],

@@ -22,7 +22,7 @@ import jax.numpy as jnp
 import optax
 
 from fusion_surrogates.common import networks, transforms
-from fusion_surrogates.tglfnn_ukaea import config
+from fusion_surrogates.tglfnn_ukaea import tglfnn_ukaea_config as config
 
 
 class TGLFNNukaeaModel:
@@ -42,7 +42,7 @@ class TGLFNNukaeaModel:
             num_hiddens=config.num_hiddens,
             hidden_size=config.hidden_size,
             dropout=config.dropout,
-            activation=config.activation,
+            activation='relu',
         )
 
     def load_params(
@@ -55,12 +55,16 @@ class TGLFNNukaeaModel:
         }
 
     def predict(self, inputs: jax.Array) -> Mapping[config.OutputLabel, jax.Array]:
-        if self._config.normalize:
-            inputs = transforms.normalize(
-                inputs,
-                mean=self._stats.input_mean,
-                stddev=self._stats.input_std,
-            )
+        """Predicts mean and variance of each flux.
+        
+        Internally normalizes the inputs based on the provided TGLFNNukaeaModelStats,
+        applies the network, and denormalizes the outputs based on TGLFNNukaeaModelStats.
+        """
+        inputs = transforms.normalize(
+            inputs,
+            mean=self._stats.input_mean,
+            stddev=self._stats.input_std,
+        )
 
         predictions = {}
 
@@ -69,14 +73,13 @@ class TGLFNNukaeaModel:
                 self._params[label], inputs, deterministic=True
             )
 
-            if self._config.unnormalize:
-                mean_prediction = transforms.unnormalize(
-                    prediction[..., config.MEAN_OUTPUT_IDX],
-                    mean=self._stats.output_mean[i],
-                    stddev=self._stats.output_std[i],
-                )
-                variance_prediction = prediction[..., config.VAR_OUTPUT_IDX]
-                prediction = jnp.stack([mean_prediction, variance_prediction], axis=-1)
+            mean_prediction = transforms.unnormalize(
+                prediction[..., config.MEAN_OUTPUT_IDX],
+                mean=self._stats.output_mean[i],
+                stddev=self._stats.output_std[i],
+            )
+            variance_prediction = prediction[..., config.VAR_OUTPUT_IDX]
+            prediction = jnp.stack([mean_prediction, variance_prediction], axis=-1)
 
             predictions[label] = prediction
 

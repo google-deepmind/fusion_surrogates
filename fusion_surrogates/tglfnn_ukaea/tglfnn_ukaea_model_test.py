@@ -18,7 +18,8 @@ import jax
 import jax.numpy as jnp
 from absl.testing import absltest, parameterized
 
-from fusion_surrogates.tglfnn_ukaea import config, tglfnn_ukaea_model
+from fusion_surrogates.tglfnn_ukaea import tglfnn_ukaea_config as config
+from fusion_surrogates.tglfnn_ukaea import tglfnn_ukaea_model
 
 
 def make_dummy_model(
@@ -26,16 +27,12 @@ def make_dummy_model(
     n_ensemble=2,
     num_hiddens=2,
     dropout=0.1,
-    normalize=True,
-    unnormalize=True,
     hidden_size=5,
 ) -> tglfnn_ukaea_model.TGLFNNukaeaModel:
     dummy_config = config.TGLFNNukaeaModelConfig(
         n_ensemble=n_ensemble,
         num_hiddens=num_hiddens,
         dropout=dropout,
-        normalize=normalize,
-        unnormalize=unnormalize,
         hidden_size=hidden_size,
     )
     dummy_stats = config.TGLFNNukaeaModelStats(
