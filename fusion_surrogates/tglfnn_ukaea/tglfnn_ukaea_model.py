@@ -22,7 +22,7 @@ import jax.numpy as jnp
 import optax
 
 from fusion_surrogates.common import networks, transforms
-from fusion_surrogates.tglfnn_ukaea import tglfnn_ukaea_config as config
+from fusion_surrogates.tglfnn_ukaea import tglfnn_ukaea_config
 
 
 class TGLFNNukaeaModel:
@@ -30,9 +30,9 @@ class TGLFNNukaeaModel:
 
     def __init__(
         self,
-        config: config.TGLFNNukaeaModelConfig,
-        stats: config.TGLFNNukaeaModelStats,
-        params: Mapping[config.OutputLabel, optax.Params] | None = None,
+        config: tglfnn_ukaea_config.TGLFNNukaeaModelConfig,
+        stats: tglfnn_ukaea_config.TGLFNNukaeaModelStats,
+        params: Mapping[tglfnn_ukaea_config.OutputLabel, optax.Params] | None = None,
     ):
         self._config = config
         self._stats = stats
@@ -42,21 +42,23 @@ class TGLFNNukaeaModel:
             num_hiddens=config.num_hiddens,
             hidden_size=config.hidden_size,
             dropout=config.dropout,
-            activation='relu',
+            activation="relu",
         )
 
     def load_params(
         self, efe_gb_pt: str | Path, efi_gb_pt: str | Path, pfi_gb_pt: str | Path
-    ) -> Mapping[config.OutputLabel, optax.Params]:
+    ) -> None:
         self._params = {
-            "efe_gb": config.params_from_pt_file(efe_gb_pt, self._config),
-            "efi_gb": config.params_from_pt_file(efi_gb_pt, self._config),
-            "pfi_gb": config.params_from_pt_file(pfi_gb_pt, self._config),
+            "efe_gb": tglfnn_ukaea_config.params_from_pt_file(efe_gb_pt, self._config),
+            "efi_gb": tglfnn_ukaea_config.params_from_pt_file(efi_gb_pt, self._config),
+            "pfi_gb": tglfnn_ukaea_config.params_from_pt_file(pfi_gb_pt, self._config),
         }
 
-    def predict(self, inputs: jax.Array) -> Mapping[config.OutputLabel, jax.Array]:
+    def predict(
+        self, inputs: jax.Array
+    ) -> Mapping[tglfnn_ukaea_config.OutputLabel, jax.Array]:
         """Predicts mean and variance of each flux.
-        
+
         Internally normalizes the inputs based on the provided TGLFNNukaeaModelStats,
         applies the network, and denormalizes the outputs based on TGLFNNukaeaModelStats.
         """
@@ -68,17 +70,17 @@ class TGLFNNukaeaModel:
 
         predictions = {}
 
-        for i, label in enumerate(config.OUTPUT_LABELS):
+        for i, label in enumerate(tglfnn_ukaea_config.OUTPUT_LABELS):
             prediction = self._network.apply(
                 self._params[label], inputs, deterministic=True
             )
 
             mean_prediction = transforms.unnormalize(
-                prediction[..., config.MEAN_OUTPUT_IDX],
+                prediction[..., tglfnn_ukaea_config.MEAN_OUTPUT_IDX],
                 mean=self._stats.output_mean[i],
                 stddev=self._stats.output_std[i],
             )
-            variance_prediction = prediction[..., config.VAR_OUTPUT_IDX]
+            variance_prediction = prediction[..., tglfnn_ukaea_config.VAR_OUTPUT_IDX]
             prediction = jnp.stack([mean_prediction, variance_prediction], axis=-1)
 
             predictions[label] = prediction

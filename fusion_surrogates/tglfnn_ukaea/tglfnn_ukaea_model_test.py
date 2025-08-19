@@ -23,7 +23,7 @@ import jax.numpy as jnp
 import requests
 from absl.testing import absltest, parameterized
 
-from fusion_surrogates.tglfnn_ukaea import tglfnn_ukaea_config as config
+from fusion_surrogates.tglfnn_ukaea import tglfnn_ukaea_config
 from fusion_surrogates.tglfnn_ukaea import tglfnn_ukaea_model
 
 
@@ -34,14 +34,14 @@ def make_dummy_model(
     dropout=0.1,
     hidden_size=5,
 ) -> tglfnn_ukaea_model.TGLFNNukaeaModel:
-    dummy_config = config.TGLFNNukaeaModelConfig(
+    dummy_config = tglfnn_ukaea_config.TGLFNNukaeaModelConfig(
         n_ensemble=n_ensemble,
         num_hiddens=num_hiddens,
         dropout=dropout,
         hidden_size=hidden_size,
         machine="multimachine",
     )
-    dummy_stats = config.TGLFNNukaeaModelStats(
+    dummy_stats = tglfnn_ukaea_config.TGLFNNukaeaModelStats(
         input_mean=jnp.zeros(len(dummy_config.input_labels)),
         input_std=jnp.zeros(len(dummy_config.input_labels)),
         output_mean=jnp.zeros(len(dummy_config.output_labels)),
@@ -97,7 +97,7 @@ class TGLFNNukaeaModelTest(parameterized.TestCase):
         inputs = jnp.ones(input_shape)
         predictions = model.predict(inputs)
 
-        for label in config.OUTPUT_LABELS:
+        for label in tglfnn_ukaea_config.OUTPUT_LABELS:
             self.assertEqual(predictions[label].shape, expected_output_shape)
 
     def test_load(self):
@@ -125,10 +125,10 @@ class TGLFNNukaeaModelTest(parameterized.TestCase):
         stats_path = download(stats_url, test_dir)
 
         model = tglfnn_ukaea_model.TGLFNNukaeaModel(
-            config=config.TGLFNNukaeaModelConfig.load(
+            config=tglfnn_ukaea_config.TGLFNNukaeaModelConfig.load(
                 machine="multimachine", config_path=config_path
             ),
-            stats=config.TGLFNNukaeaModelStats.load(
+            stats=tglfnn_ukaea_config.TGLFNNukaeaModelStats.load(
                 machine="multimachine", stats_path=stats_path
             ),
         )
