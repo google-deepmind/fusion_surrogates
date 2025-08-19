@@ -17,6 +17,7 @@
 import dataclasses
 import json
 import typing
+from enum import Enum
 from pathlib import Path
 from typing import Final, Literal, Mapping
 
@@ -32,10 +33,14 @@ VAR_OUTPUT_IDX: Final[int] = 1
 OutputLabel = Literal["efe_gb", "efi_gb", "pfi_gb"]
 OUTPUT_LABELS = typing.get_args(OutputLabel)
 
-Machine = Literal["step", "multimachine"]
 
-INPUT_LABELS_DICT: Final[Mapping[Machine, list[str]]] = {
-    "step": [
+class Machine(Enum):
+    STEP = "step"
+    MULTIMACHINE = "multimachine"
+
+
+INPUT_LABELS_DICT: Final[Mapping[Machine, tuple[str, ...]]] = {
+    Machine.STEP: (
         "RLNS_1",
         "RLTS_1",
         "RLTS_2",
@@ -52,8 +57,8 @@ INPUT_LABELS_DICT: Final[Mapping[Machine, list[str]]] = {
         "S_DELTA_LOC",
         "BETAE",
         "ZEFF",
-    ],
-    "multimachine": [
+    ),
+    Machine.MULTIMACHINE: (
         "RLNS_1",
         "RLTS_1",
         "RLTS_2",
@@ -68,7 +73,7 @@ INPUT_LABELS_DICT: Final[Mapping[Machine, list[str]]] = {
         "DELTA_LOC",
         "ZEFF",
         "VEXB_SHEAR",
-    ],
+    ),
 }
 
 
@@ -81,11 +86,11 @@ class TGLFNNukaeaModelConfig:
     machine: Machine
 
     @property
-    def input_labels(self) -> list[str]:
+    def input_labels(self) -> tuple[str, ...]:
         return INPUT_LABELS_DICT[self.machine]
 
     @property
-    def output_labels(self) -> list[str]:
+    def output_labels(self) -> tuple[str, ...]:
         return OUTPUT_LABELS
 
     @classmethod
@@ -124,7 +129,7 @@ class TGLFNNukaeaModelStats:
 
 
 def params_from_pytorch_state_dict(
-    pytorch_state_dict: dict, config: TGLFNNukaeaModelConfig
+    pytorch_state_dict: dict[str, torch.Tensor], config: TGLFNNukaeaModelConfig
 ) -> optax.Params:
     params = {}
     for i in range(config.n_ensemble):
