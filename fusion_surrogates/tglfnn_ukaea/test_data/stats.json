@@ -1,0 +1,66 @@
+{
+    "RLNS_1": {
+        "mean": 0.0,
+        "std": 1.0
+    },
+    "RLTS_1": {
+        "mean": 0.0,
+        "std": 1.0
+    },
+    "RLTS_2": {
+        "mean": 0.0,
+        "std": 1.0
+    },
+    "TAUS_2": {
+        "mean": 0.0,
+        "std": 1.0
+    },
+    "RMIN_LOC": {
+        "mean": 0.0,
+        "std": 1.0
+    },
+    "DRMAJDX_LOC": {
+        "mean": 0.0,
+        "std": 1.0
+    },
+    "Q_LOC": {
+        "mean": 0.0,
+        "std": 1.0
+    },
+    "SHAT": {
+        "mean": 0.0,
+        "std": 1.0
+    },
+    "XNUE": {
+        "mean": 0.0,
+        "std": 1.0
+    },
+    "KAPPA_LOC": {
+        "mean": 0.0,
+        "std": 1.0
+    },
+    "DELTA_LOC": {
+        "mean": 0.0,
+        "std": 1.0
+    },
+    "ZEFF": {
+        "mean": 0.0,
+        "std": 1.0
+    },
+    "VEXB_SHEAR": {
+        "mean": 0.0,
+        "std": 1.0
+    },
+    "efe_gb": {
+        "mean": 0.0,
+        "std": 1.0
+    },
+    "efi_gb": {
+        "mean": 0.0,
+        "std": 1.0
+    },
+    "pfi_gb": {
+        "mean": 0.0,
+        "std": 1.0
+    }
+}

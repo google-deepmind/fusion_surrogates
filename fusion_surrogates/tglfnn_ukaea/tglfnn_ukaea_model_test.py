@@ -14,60 +14,56 @@
 
 """Tests for UKAEA's TGLFNN surrogate"""
 
-import os
-import tempfile
-from pathlib import Path
+import pathlib
 
-import jax
 import jax.numpy as jnp
-import requests
 from absl.testing import absltest, parameterized
 
-from fusion_surrogates.tglfnn_ukaea import tglfnn_ukaea_config
-from fusion_surrogates.tglfnn_ukaea import tglfnn_ukaea_model
-
-
-def make_dummy_model(
-    input_shape,
-    n_ensemble=2,
-    num_hiddens=2,
-    dropout=0.1,
-    hidden_size=5,
-) -> tglfnn_ukaea_model.TGLFNNukaeaModel:
-    dummy_config = tglfnn_ukaea_config.TGLFNNukaeaModelConfig(
-        n_ensemble=n_ensemble,
-        num_hiddens=num_hiddens,
-        dropout=dropout,
-        hidden_size=hidden_size,
-        machine="multimachine",
-    )
-    dummy_stats = tglfnn_ukaea_config.TGLFNNukaeaModelStats(
-        input_mean=jnp.zeros(len(dummy_config.input_labels)),
-        input_std=jnp.zeros(len(dummy_config.input_labels)),
-        output_mean=jnp.zeros(len(dummy_config.output_labels)),
-        output_std=jnp.zeros(len(dummy_config.output_labels)),
-    )
-
-    # Instantiate a model in order to construct params
-    model = tglfnn_ukaea_model.TGLFNNukaeaModel(
-        config=dummy_config, stats=dummy_stats, params=None
-    )
-    key = jax.random.key(0)
-    keys = jax.random.split(key, len(dummy_config.output_labels))
-    params = {
-        label: model._network.init(key, jnp.ones(input_shape))
-        for key, label in zip(keys, dummy_config.output_labels)
-    }
-
-    # Recreate the model with the given params
-    model = tglfnn_ukaea_model.TGLFNNukaeaModel(
-        config=dummy_config, stats=dummy_stats, params=params
-    )
-
-    return model
+from fusion_surrogates.tglfnn_ukaea import tglfnn_ukaea_config, tglfnn_ukaea_model
 
 
 class TGLFNNukaeaModelTest(parameterized.TestCase):
+    def get_test_data_dir(self):
+        src_dir = pathlib.Path(absltest.TEST_SRCDIR.value)
+        path = src_dir.joinpath("test_data")
+        assert path.is_dir(), f"Path {path} is not a directory."
+        return path
+
+    def test_load(self):
+        """Tests loading config, stats, and params."""
+        test_data = self.get_test_data_dir()
+        model = tglfnn_ukaea_model.TGLFNNukaeaModel(
+            config=tglfnn_ukaea_config.TGLFNNukaeaModelConfig.load(
+                machine=tglfnn_ukaea_config.Machine("multimachine"),
+                config_path=test_data / "config.yaml",
+            ),
+            stats=tglfnn_ukaea_config.TGLFNNukaeaModelStats.load(
+                machine=tglfnn_ukaea_config.Machine("multimachine"),
+                stats_path=test_data / "stats.json",
+            ),
+        )
+        assert model._params is None
+
+        # Check loading is successful
+        model.load_params(
+            efe_gb_pt=test_data / "dummy_torch_checkpoint.pt",
+            efi_gb_pt=test_data / "dummy_torch_checkpoint.pt",
+            pfi_gb_pt=test_data / "dummy_torch_checkpoint.pt",
+        )
+        assert model._params is not None
+
+        for key in model._config.output_labels:
+            # Check output labels
+            assert key in model._params
+
+            # Check number of ensemble members
+            assert len(model._params.get(key).get("params")) == model._config.n_ensemble
+
+            # Check number of layers
+            assert (
+                len(model._params.get(key).get("params").get("GaussianMLP_0"))
+                == model._config.num_hiddens
+            )
 
     @parameterized.named_parameters(
         dict(
@@ -93,67 +89,28 @@ class TGLFNNukaeaModelTest(parameterized.TestCase):
     )
     def test_predict_shape(self, input_shape, expected_output_shape):
         """Test that the predict function returns the correct shape."""
-        model = make_dummy_model(input_shape)
+        test_data = self.get_test_data_dir()
+        model = tglfnn_ukaea_model.TGLFNNukaeaModel(
+            config=tglfnn_ukaea_config.TGLFNNukaeaModelConfig.load(
+                machine=tglfnn_ukaea_config.Machine("multimachine"),
+                config_path=test_data / "config.yaml",
+            ),
+            stats=tglfnn_ukaea_config.TGLFNNukaeaModelStats.load(
+                machine=tglfnn_ukaea_config.Machine("multimachine"),
+                stats_path=test_data / "stats.json",
+            ),
+        )
+        model.load_params(
+            efe_gb_pt=test_data / "dummy_torch_checkpoint.pt",
+            efi_gb_pt=test_data / "dummy_torch_checkpoint.pt",
+            pfi_gb_pt=test_data / "dummy_torch_checkpoint.pt",
+        )
+
         inputs = jnp.ones(input_shape)
         predictions = model.predict(inputs)
 
         for label in tglfnn_ukaea_config.OUTPUT_LABELS:
             self.assertEqual(predictions[label].shape, expected_output_shape)
-
-    def test_load(self):
-        """Tests loading config, stats, and params from the Github repo."""
-
-        def download(src, dest):
-            file_name = os.path.basename(src)
-
-            response = requests.get(src, stream=True)
-            response.raise_for_status()
-
-            with open(dest / file_name, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-
-            return dest / file_name
-
-        efe_weights_url = "https://raw.githubusercontent.com/ukaea/tglfnn-ukaea/main/MultiMachineHyper_1Aug25/regressor_efe_gb.pt"
-        config_url = "https://raw.githubusercontent.com/ukaea/tglfnn-ukaea/main/MultiMachineHyper_1Aug25/config.yaml"
-        stats_url = "https://raw.githubusercontent.com/ukaea/tglfnn-ukaea/main/MultiMachineHyper_1Aug25/stats.json"
-
-        test_dir = Path(tempfile.mkdtemp())
-        efe_weights_path = download(efe_weights_url, test_dir)
-        config_path = download(config_url, test_dir)
-        stats_path = download(stats_url, test_dir)
-
-        model = tglfnn_ukaea_model.TGLFNNukaeaModel(
-            config=tglfnn_ukaea_config.TGLFNNukaeaModelConfig.load(
-                machine="multimachine", config_path=config_path
-            ),
-            stats=tglfnn_ukaea_config.TGLFNNukaeaModelStats.load(
-                machine="multimachine", stats_path=stats_path
-            ),
-        )
-        assert model._params is None
-
-        # Check loading is successful
-        model.load_params(
-            efe_gb_pt=efe_weights_path,
-            efi_gb_pt=efe_weights_path,
-            pfi_gb_pt=efe_weights_path,
-        )
-        assert model._params is not None
-
-        for key in model._config.output_labels:
-            # Check output labels
-            assert key in model._params
-
-            # Check number of ensemble members
-            assert len(model._params.get(key).get("params")) == model._config.n_ensemble
-
-            # Check number of layers
-            assert (
-                len(model._params.get(key).get("params").get("GaussianMLP_0"))
-                == model._config.num_hiddens
-            )
 
 
 if __name__ == "__main__":
