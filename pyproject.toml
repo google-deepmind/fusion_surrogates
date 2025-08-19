@@ -34,7 +34,7 @@ testing = [
     "pylint>=2.6.0",
     "pyink",
 ]
-ukaea = [
+tglfnnukaea = [
     "torch",
     "pyyaml",
 ]
