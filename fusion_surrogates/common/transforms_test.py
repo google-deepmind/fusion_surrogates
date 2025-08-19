@@ -14,7 +14,8 @@
 
 import jax
 import jax.numpy as jnp
-from absl.testing import absltest, parameterized
+from absl.testing import absltest
+from absl.testing import parameterized
 from numpy import testing
 
 from fusion_surrogates.common import transforms

@@ -17,9 +17,11 @@
 import pathlib
 
 import jax.numpy as jnp
-from absl.testing import absltest, parameterized
+from absl.testing import absltest
+from absl.testing import parameterized
 
-from fusion_surrogates.tglfnn_ukaea import tglfnn_ukaea_config, tglfnn_ukaea_model
+from fusion_surrogates.tglfnn_ukaea import tglfnn_ukaea_config
+from fusion_surrogates.tglfnn_ukaea import tglfnn_ukaea_model
 
 
 class TGLFNNukaeaModelTest(parameterized.TestCase):
@@ -42,7 +44,7 @@ class TGLFNNukaeaModelTest(parameterized.TestCase):
                 stats_path=test_data / "stats.json",
             ),
         )
-        assert model._params is None
+        self.assertIsNone(model._params)
 
         # Check loading is successful
         model.load_params(
@@ -50,19 +52,19 @@ class TGLFNNukaeaModelTest(parameterized.TestCase):
             efi_gb_pt=test_data / "dummy_torch_checkpoint.pt",
             pfi_gb_pt=test_data / "dummy_torch_checkpoint.pt",
         )
-        assert model._params is not None
+        self.assertIsNotNone(model._params)
 
         for key in model._config.output_labels:
             # Check output labels
-            assert key in model._params
+            self.assertIn(key, model._params)
 
             # Check number of ensemble members
-            assert len(model._params.get(key).get("params")) == model._config.n_ensemble
+            self.assertLen(model._params.get(key).get("params"), model._config.n_ensemble)
 
             # Check number of layers
-            assert (
-                len(model._params.get(key).get("params").get("GaussianMLP_0"))
-                == model._config.num_hiddens
+            self.assertLen(
+                model._params.get(key).get("params").get("GaussianMLP_0"),
+                model._config.num_hiddens
             )
 
     @parameterized.named_parameters(

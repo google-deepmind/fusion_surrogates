@@ -21,7 +21,8 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from fusion_surrogates.common import networks, transforms
+from fusion_surrogates.common import networks
+from fusion_surrogates.common import transforms
 from fusion_surrogates.tglfnn_ukaea import tglfnn_ukaea_config
 
 
