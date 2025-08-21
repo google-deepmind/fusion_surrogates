@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "fusion_surrogates"
 description = "Transport surrogate models for Tokamak fusion."
-version = "0.1.0"
+version = "0.4.1"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
