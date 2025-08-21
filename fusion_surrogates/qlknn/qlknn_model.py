@@ -1,4 +1,4 @@
-# Copyright 2024 DeepMind Technologies Limited.
+# Copyright 2025 DeepMind Technologies Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ from flax import serialization
 from flax import typing as flax_typing
 import flax.linen as nn
 from fusion_surrogates.common import networks
+from fusion_surrogates.common import transforms
 from fusion_surrogates.qlknn.models import registry
 import immutabledict
 import jax
@@ -40,20 +41,6 @@ import optax
 
 
 VERSION: Final[str] = '11D'
-
-
-def normalize(
-    data: jax.Array, *, mean: jax.Array, stddev: jax.Array
-) -> jax.Array:
-  """Normalizes data to have mean 0 and stddev 1."""
-  return (data - mean) / jnp.where(stddev == 0, 1, stddev)
-
-
-def unnormalize(
-    data: jax.Array, *, mean: jax.Array, stddev: jax.Array
-) -> jax.Array:
-  """Unnormalizes data to the orginal distribution."""
-  return data * jnp.where(stddev == 0, 1, stddev) + mean
 
 
 @dataclasses.dataclass
@@ -278,7 +265,7 @@ class QLKNNModel:
       the raw model prediction
     """
     if self._config.normalize_inputs and self._config.stats_data is not None:
-      inputs = normalize(
+      inputs = transforms.normalize(
           inputs,
           mean=self._config.stats_data.input_mean,
           stddev=self._config.stats_data.input_stddev,
@@ -301,7 +288,7 @@ class QLKNNModel:
         jax.tree_util.tree_map(lambda x: x[0], self._params), inputs
     )
     if self._config.normalize_targets and self._config.stats_data is not None:
-      outputs = unnormalize(
+      outputs = transforms.unnormalize(
           outputs,
           mean=self._config.stats_data.target_mean,
           stddev=self._config.stats_data.target_stddev,
