@@ -10,7 +10,7 @@ name = "fusion_surrogates"
 description = "Transport surrogate models for Tokamak fusion."
 version = "0.4.1"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{name = "DeepMind"}]
@@ -23,7 +23,7 @@ dependencies = [
     "jax>=0.4.31",
     "flax>=0.7.5",
     "numpy>2",
-    "setuptools;python_version>='3.10'",
+    "setuptools;python_version>='3.11'",
     "immutabledict",
 ]
 
