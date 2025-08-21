@@ -21,3 +21,7 @@ DEFAULT_MODEL_NAME = 'qlknn_7_11_v1'
 MODELS = immutabledict.immutabledict({
     'qlknn_7_11_v1': f'{pathlib.Path(__file__).parent}/qlknn_7_11.qlknn',
 })
+
+ONNX_MODELS = immutabledict.immutabledict({
+    'qlknn_7_11_v1': f'{pathlib.Path(__file__).parent}/qlknn_7_11.onnx',
+})

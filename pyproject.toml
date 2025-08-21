@@ -29,10 +29,15 @@ dependencies = [
 
 [project.optional-dependencies]
 testing = [
+    "chex",
+    "jaxonnxruntime",
+    "onnx",
     "pytest",
     "pytest-xdist",
     "pylint>=2.6.0",
     "pyink",
+    "pyyaml",
+    "torch",
 ]
 tglfnnukaea = [
     "torch",
