@@ -32,7 +32,7 @@ class TGLFNNukaeaModelTest(parameterized.TestCase):
     assert path.is_dir(), f"Path {path} is not a directory."
     return path
 
-  def test_load(self):
+  def test_dummy_load(self):
     """Tests loading config, stats, and params."""
     test_data = self.get_test_data_dir()
     model = tglfnn_ukaea_model.TGLFNNukaeaModel(
@@ -69,6 +69,25 @@ class TGLFNNukaeaModelTest(parameterized.TestCase):
           model._params.get(key).get("params").get("GaussianMLP_0"),
           model._config.num_hiddens,
       )
+
+  @absltest.skipUnless(os.getenv("TGLFNN_UKAEA_DIR", None) is not None, "TGLFNN_UKAEA_DIR not set")
+  def test_load_params_without_errors(self):
+    weights_dir = pathlib.Path(os.getenv("TGLFNN_UKAEA_DIR")) / "MultiMachineHyper_1Aug25"
+    model = tglfnn_ukaea_model.TGLFNNukaeaModel(
+        config=tglfnn_ukaea_config.TGLFNNukaeaModelConfig.load(
+            machine=tglfnn_ukaea_config.Machine("multimachine"),
+            config_path=weights_dir / "config.yaml",
+        ),
+        stats=tglfnn_ukaea_config.TGLFNNukaeaModelStats.load(
+            machine=tglfnn_ukaea_config.Machine("multimachine"),
+            stats_path=weights_dir / "stats.json",
+        ),
+    )
+    model.load_params(
+        efe_gb_pt=weights_dir / "regressor_efe_gb.pt",
+        efi_gb_pt=weights_dir / "regressor_efi_gb.pt",
+        pfi_gb_pt=weights_dir / "regressor_pfi_gb.pt",
+    )
 
   @parameterized.named_parameters(
       dict(
