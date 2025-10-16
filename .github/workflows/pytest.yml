@@ -16,14 +16,6 @@ jobs:
       # Checkout fusion-surrogates
       - uses: actions/checkout@v4
 
-      # Checkout tglfnn-ukaea
-      # lfs: true is needed to pull the model weights
-      - uses: actions/checkout@v4
-        with:
-          repository: "ukaea/tglfnn-ukaea"
-          path: "external_dependencies/tglfnn-ukaea"
-          lfs: "true"
-
       # Install deps
       - uses: actions/setup-python@v5
         with:
@@ -36,8 +28,3 @@ jobs:
       # Run tests (in parallel)
       - name: Run core tests
         run: pytest -vv -n auto
-
-      - name: Test tglfnn-ukaea loading
-        run: >-
-          TGLFNN_UKAEA_DIR=external_dependencies/tglfnn-ukaea
-          pytest -vv fusion_surrogates/tglfnn_ukaea/tglfnn_ukaea_model_test.py
