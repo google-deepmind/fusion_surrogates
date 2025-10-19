@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#   http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,97 +12,108 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Base code for UKAEA's TGLFNN model."""
+"""JAX implementation of UKAEA's TGLFNN model."""
 
-import pathlib
-from typing import Mapping
+from typing import Literal, Mapping
+
+import jax
+import jax.numpy as jnp
+import tglfnn_ukaea as tglfnn_ukaea_lib
 
 from fusion_surrogates.common import networks
 from fusion_surrogates.common import transforms
-from fusion_surrogates.tglfnn_ukaea import tglfnn_ukaea_config
-import jax
-import jax.numpy as jnp
-import optax
-
-
-Path = pathlib.Path
 
 
 class TGLFNNukaeaModel:
   """UKAEA TGLF surrogate."""
 
   def __init__(
-      self,
-      config: tglfnn_ukaea_config.TGLFNNukaeaModelConfig,
-      stats: tglfnn_ukaea_config.TGLFNNukaeaModelStats,
-      params: (
-          Mapping[tglfnn_ukaea_config.OutputLabel, optax.Params] | None
-      ) = None,
+    self,
+    machine: Literal["step", "multimachine"] = "multimachine",
   ):
-    self._config = config
-    self._stats = stats
-    self._params = params
+    model_dict = tglfnn_ukaea_lib.load(machine)
+
+    self.input_labels = model_dict["input_labels"]
+    self.output_labels = tuple(model_dict["params"].keys())
+
     self._network = networks.GaussianMLPEnsemble(
-        n_ensemble=config.n_ensemble,
-        num_hiddens=config.num_hiddens,
-        hidden_size=config.hidden_size,
-        dropout=config.dropout,
-        activation="relu",
+      n_ensemble=model_dict["config"].get("num_estimators", 5),
+      num_hiddens=model_dict["config"].get("model_size", 6),
+      hidden_size=model_dict["config"].get("hidden_size", 512),
+      dropout=model_dict["config"].get("dropout", 0.0),
+      activation=model_dict["config"].get("activation", "relu"),
     )
 
-  def load_params(
-      self, efe_gb_pt: str | Path, efi_gb_pt: str | Path, pfi_gb_pt: str | Path
-  ) -> None:
-    self._params = {
-        "efe_gb": tglfnn_ukaea_config.params_from_pt_file(
-            efe_gb_pt, self._config
-        ),
-        "efi_gb": tglfnn_ukaea_config.params_from_pt_file(
-            efi_gb_pt, self._config
-        ),
-        "pfi_gb": tglfnn_ukaea_config.params_from_pt_file(
-            pfi_gb_pt, self._config
-        ),
-    }
-
-  def predict(
-      self, inputs: jax.Array
-  ) -> Mapping[tglfnn_ukaea_config.OutputLabel, jax.Array]:
-    """Predicts mean and variance of each flux.
-
-    Internally normalizes the inputs based on the provided
-    TGLFNNukaeaModelStats,
-    applies the network, and denormalizes the outputs based on
-    TGLFNNukaeaModelStats.
-
-    Args:
-      inputs: The input array to the model.
-
-    Returns:
-      A mapping from each output label to a jax.Array containing the predicted
-      mean and variance.
-    """
-    inputs = transforms.normalize(
-        inputs,
-        mean=self._stats.input_mean,
-        stddev=self._stats.input_std,
+    # Construct a PyTree of parameters
+    # - Transposed weights compared to the original model
+    # - The following label changes:
+    #   "MLP_{i}" -> "GaussianMLP_{i}"
+    #   "FullyConnectedLayer_{i}" -> "Dense_{i}"
+    #   "weight" -> "kernel"
+    # - Stacked for vmapping
+    params = {}
+    for output_label in self.output_labels:
+      ensemble = {}
+      for i in range(self._network.n_ensemble):
+        network_params = {}
+        for j in range(self._network.num_hiddens):
+          layer_params = {}
+          original_layer_params = model_dict["params"][output_label][
+            f"MLP_{i}"][f"FullyConnectedLayer_{j}"]
+          layer_params["bias"] = jnp.array(original_layer_params["bias"].T)
+          layer_params["kernel"] = jnp.array(original_layer_params["weight"].T)
+          network_params[f"Dense_{j}"] = layer_params
+        ensemble[f"GaussianMLP_{i}"] = network_params
+      params[output_label] = ensemble
+    # Stack the parameters 
+    self._params = jax.tree.map(
+      lambda *args: jnp.stack(args),
+      *[params[label] for label in self.output_labels]
+    )
+    
+    # Vectorize the stats
+    self._input_means = jnp.array(
+      [v["mean"] for k, v in model_dict["stats"].items() if k in self.input_labels]
+    )
+    self._input_stds = jnp.array(
+      [v["std"] for k, v in model_dict["stats"].items() if k in self.input_labels]
+    )
+    self._output_means = jnp.array(
+      [v["mean"] for k, v in model_dict["stats"].items() if k in self.output_labels]
+    )
+    self._output_stds = jnp.array(
+      [v["std"] for k, v in model_dict["stats"].items() if k in self.output_labels]
     )
 
-    predictions = {}
+  def predict(self, inputs: jax.Array) -> Mapping[str, jax.Array]:
+    """Predicts mean and variance of each flux."""
+    normalized_inputs = transforms.normalize(
+      inputs,
+      mean=self._input_means,
+      stddev=self._input_stds,
+    )
 
-    for i, label in enumerate(tglfnn_ukaea_config.OUTPUT_LABELS):
-      prediction = self._network.apply(
-          self._params[label], inputs, deterministic=True
-      )
+    normalized_predictions = jax.vmap(
+        lambda params:
+            self._network.apply(
+                {"params": params},
+                normalized_inputs,
+                deterministic=True,
+            ),
+    )(self._params)
 
-      mean_prediction = transforms.unnormalize(
-          prediction[..., tglfnn_ukaea_config.MEAN_OUTPUT_IDX],
-          mean=self._stats.output_mean[i],
-          stddev=self._stats.output_std[i],
-      )
-      variance_prediction = prediction[..., tglfnn_ukaea_config.VAR_OUTPUT_IDX]
-      prediction = jnp.stack([mean_prediction, variance_prediction], axis=-1)
+    broadcast_means = jnp.expand_dims(
+        self._output_means,
+        axis=tuple(range(1, normalized_predictions.ndim)),
+    )
+    broadcast_stds = jnp.expand_dims(
+        self._output_stds,
+        axis=tuple(range(1, normalized_predictions.ndim)),
+    )
+    predictions = transforms.unnormalize(
+        normalized_predictions,
+        mean=broadcast_means,
+        stddev=broadcast_stds
+    )
 
-      predictions[label] = prediction
-
-    return predictions
+    return {label: predictions[i] for i, label in enumerate(self.output_labels)}
