@@ -20,26 +20,50 @@ classifiers = [
 
 dependencies = [
     "absl-py>=2.0.0",
-    "jax>=0.4.31",
     "flax>=0.7.5",
+    "immutabledict",
+    "jax>=0.4.31",
     "numpy>2",
     "setuptools;python_version>='3.11'",
-    "immutabledict",
 ]
 
 [project.optional-dependencies]
+
 testing = [
     "chex",
+    "isort",
     "jaxonnxruntime",
     "onnx",
     "pytest",
     "pytest-xdist",
     "pylint>=2.6.0",
     "pyink",
+    "tglfnn_ukaea==0.1.0",
 ]
 tglfnnukaea = [
-    "tglfnn_ukaea=0.1.0",
+    "tglfnn_ukaea==0.1.0",
 ]
 
 [tool.setuptools.packages.find]
 include = ["fusion_surrogates*"]
+
+[tool.isort]
+profile = "google"
+known_third_party = 'fusion_surrogates'
+
+[tool.pyink]
+# Formatting configuration to follow Google style-guide
+line-length = 80
+unstable = true
+target-version = []
+pyink-indentation = 2
+pyink-use-majority-quotes = true
+pyink-annotation-pragmas = [
+  "noqa",
+  "pylint:",
+  "type: ignore",
+  "pytype:",
+  "mypy:",
+  "pyright:",
+  "pyre-",
+]
