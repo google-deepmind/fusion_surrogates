@@ -1,4 +1,0 @@
-num_estimators: 2
-model_size: 3
-dropout: 0.1
-hidden_size: 5

@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "fusion_surrogates"
 description = "Transport surrogate models for Tokamak fusion."
-version = "0.4.2"
+version = "0.4.3"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
@@ -36,12 +36,9 @@ testing = [
     "pytest-xdist",
     "pylint>=2.6.0",
     "pyink",
-    "pyyaml",
-    "torch>=2.7.1", # Required for numpy>2 compatibility
 ]
 tglfnnukaea = [
-    "torch>=2.7.1", # Required for numpy>2 compatibility
-    "pyyaml",
+    "tglfnn_ukaea=0.1.0",
 ]
 
 [tool.setuptools.packages.find]
