@@ -29,7 +29,14 @@ dependencies = [
 
 [project.optional-dependencies]
 
+tglfnnukaea = [
+    "tglfnn_ukaea==0.1.0",
+]
+
 testing = [
+    # Self-refernce to the optional dependency.
+    "fusion_surrogates[tglfnnukaea]",
+    # Extra dependencies for testing.
     "chex",
     "isort",
     "jaxonnxruntime",
@@ -38,10 +45,6 @@ testing = [
     "pytest-xdist",
     "pylint>=2.6.0",
     "pyink",
-    "tglfnn_ukaea==0.1.0",
-]
-tglfnnukaea = [
-    "tglfnn_ukaea==0.1.0",
 ]
 
 [tool.setuptools.packages.find]
