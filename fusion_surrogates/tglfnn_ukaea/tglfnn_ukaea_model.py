@@ -28,7 +28,7 @@
 
 """JAX implementation of UKAEA's TGLFNN model."""
 
-from typing import Literal, Mapping
+from typing import Any, Literal, Mapping
 
 from fusion_surrogates.common import networks
 from fusion_surrogates.common import transforms
@@ -44,6 +44,7 @@ class TGLFNNukaeaModel:
       self,
       machine: Literal["step", "multimachine"] = "multimachine",
   ):
+    self.machine = machine
     model_dict = tglfnn_ukaea_lib.load(machine)
 
     self.input_labels = model_dict["input_labels"]
@@ -136,3 +137,9 @@ class TGLFNNukaeaModel:
     )
 
     return {label: predictions[i] for i, label in enumerate(self.output_labels)}
+
+  def __hash__(self) -> int:
+    return hash(self.machine)
+
+  def __eq__(self, other: Any) -> bool:
+    return isinstance(other, TGLFNNukaeaModel) and self.machine == other.machine
