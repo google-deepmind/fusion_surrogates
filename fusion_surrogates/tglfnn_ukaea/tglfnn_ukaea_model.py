@@ -28,7 +28,7 @@
 
 """JAX implementation of UKAEA's TGLFNN model."""
 
-from typing import Literal, Mapping
+from typing import Any, Literal, Mapping
 
 from fusion_surrogates.common import networks
 from fusion_surrogates.common import transforms
@@ -38,12 +38,18 @@ import tglfnn_ukaea as tglfnn_ukaea_lib
 
 
 class TGLFNNukaeaModel:
-  """UKAEA TGLF surrogate."""
+  """UKAEA TGLF surrogate.
+
+  This object is intended for use as static argument to jitted Jax
+  functions. It therefore is immutable and hashes by value,
+  not id.
+  """
 
   def __init__(
       self,
       machine: Literal["step", "multimachine"] = "multimachine",
   ):
+    self.machine = machine
     model_dict = tglfnn_ukaea_lib.load(machine)
 
     self.input_labels = model_dict["input_labels"]
@@ -107,6 +113,9 @@ class TGLFNNukaeaModel:
         if k in self.output_labels
     ])
 
+    # __init__ method is done, activate immutability
+    self._frozen = True
+
   def predict(self, inputs: jax.Array) -> Mapping[str, jax.Array]:
     """Predicts mean and variance of each flux."""
     normalized_inputs = transforms.normalize(
@@ -136,3 +145,21 @@ class TGLFNNukaeaModel:
     )
 
     return {label: predictions[i] for i, label in enumerate(self.output_labels)}
+
+  def __hash__(self) -> int:
+    return hash(self.machine)
+
+  def __eq__(self, other: Any) -> bool:
+    return isinstance(other, TGLFNNukaeaModel) and self.machine == other.machine
+
+  def __setattr__(self, attr, value):
+    # pylint: disable=g-doc-args
+    # pylint: disable=g-doc-return-or-yield
+    """Override __setattr__ to make the class (sort of) immutable.
+
+    Note that you can still do obj.field.subfield = x, so it is not true
+    immutability, but this to helps to avoid some careless errors.
+    """
+    if getattr(self, "_frozen", False):
+      raise AttributeError("TGLFNNukaeaModel is immutable.")
+    return super().__setattr__(attr, value)
