@@ -12,21 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Common functions for transforming data."""
+"""Registry of paths for fast ion stabilization models."""
 
-import jax
-import jax.numpy as jnp
+import pathlib
 
+import immutabledict
 
-def normalize(
-    data: jax.Array, *, mean: jax.Array, stddev: jax.Array
-) -> jax.Array:
-  """Normalizes data to have mean 0 and stddev 1."""
-  return (data - mean) / jnp.where(stddev == 0, 1, stddev)
+DEFAULT_MODELS = immutabledict.immutabledict({
+    'H': 'fast_ion_H_v1',
+    'He3': 'fast_ion_He3_v1',
+})
 
-
-def unnormalize(
-    data: jax.Array, *, mean: jax.Array, stddev: jax.Array
-) -> jax.Array:
-  """Unnormalizes data to the original distribution."""
-  return data * jnp.where(stddev == 0, 1, stddev) + mean
+MODELS = immutabledict.immutabledict({
+    'fast_ion_H_v1': f'{pathlib.Path(__file__).parent}/fast_ion_H_v1.fistab',
+    'fast_ion_He3_v1': (
+        f'{pathlib.Path(__file__).parent}/fast_ion_He3_v1.fistab'
+    ),
+})
