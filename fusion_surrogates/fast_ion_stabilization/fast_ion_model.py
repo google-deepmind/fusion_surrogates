@@ -65,9 +65,6 @@ class StabilizationMLP(nn.Module):
 
   Output = 1.0 + raw_n_fi_over_ne * MLP(x_normalized).
   Guarantees output = 1.0 when n_fi/ne = 0 (no fast ions).
-
-  Uses common.networks.MLP as the inner torso, with the n_fi gating
-  constraint applied on top.
   """
 
   num_hiddens: int
