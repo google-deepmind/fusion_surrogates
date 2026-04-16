@@ -80,6 +80,7 @@ class QlknnModelTest(parameterized.TestCase):
     """Tests that get_fluxes_from_targets outputs are computed as expected."""
     config = qlknn_model_test_utils.get_test_model_config()
     model = qlknn_model.QLKNNModel(config=config)
+    # Use two leading batch dimensions to catch unintended flattening.
     targets = jax.random.uniform(
         jax.random.key(0), shape=(2, 3, model.num_targets)
     )
