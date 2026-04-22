@@ -307,18 +307,19 @@ class QLKNNModel:
     Returns:
       A flux array.
     """
-    if targets.ndim != 2:
-      targets = jnp.reshape(targets, [-1, targets.shape[-1]])
     target_name = self._config.flux_map[flux_name]['target']
     denominator_name = self._config.flux_map[flux_name]['denominator']
     target_idx = self._config.target_names.index(target_name)
     if denominator_name is not None:
       denominator_idx = self._config.target_names.index(denominator_name)
       # We clip the leading flux to 0.
-      flux = targets[:, target_idx] * targets[:, denominator_idx].clip(0)
+      flux = (
+          targets[..., target_idx]
+          * jnp.clip(targets[..., denominator_idx], min=0)
+      )
     else:
       # We clip the leading flux to 0.
-      flux = targets[:, target_idx].clip(0)
+      flux = jnp.clip(targets[..., target_idx], min=0)
     return jnp.expand_dims(flux, axis=-1)
 
   def predict(self, inputs: jax.Array) -> dict[str, jax.Array]:

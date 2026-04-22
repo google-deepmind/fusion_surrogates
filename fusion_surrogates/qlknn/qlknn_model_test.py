@@ -60,46 +60,46 @@ class QlknnModelTest(parameterized.TestCase):
         jax.random.key(0), shape=batch_dims + (model.num_inputs,)
     )
     targets = model.predict_targets(inputs)
-    # Flattening the batch dims.
-    targets = targets.reshape(-1, model.num_targets)
     fluxes = model.predict(inputs)
 
     def _get_column(idx):
-      """Get a (B, 1) column from targets."""
-      return targets[:, idx][:, None]
+      """Get a (..., 1) column from targets."""
+      return targets[..., idx : idx + 1]
 
-    testing.assert_array_equal(fluxes['flux0'], _get_column(0).clip(0))
+    testing.assert_array_equal(fluxes['flux0'], jnp.clip(_get_column(0), min=0))
     testing.assert_array_equal(
-        fluxes['flux1'], _get_column(1) * _get_column(0).clip(0)
+        fluxes['flux1'],
+        _get_column(1) * jnp.clip(_get_column(0), min=0),
     )
     testing.assert_array_equal(
-        fluxes['flux2'], _get_column(2) * _get_column(0).clip(0)
+        fluxes['flux2'],
+        _get_column(2) * jnp.clip(_get_column(0), min=0),
     )
 
   def test_get_fluxes_from_targets(self):
     """Tests that get_fluxes_from_targets outputs are computed as expected."""
     config = qlknn_model_test_utils.get_test_model_config()
     model = qlknn_model.QLKNNModel(config=config)
+    # Use two leading batch dimensions to catch unintended flattening.
     targets = jax.random.uniform(
-        jax.random.key(0), shape=(1, 10, model.num_targets)
+        jax.random.key(0), shape=(2, 3, model.num_targets)
     )
-    targets = targets.reshape(-1, model.num_targets)
 
     def _get_column(idx):
-      """Get a (B, 1) column from targets."""
-      return targets[:, idx][:, None]
+      """Get a (..., 1) column from targets."""
+      return targets[..., idx : idx + 1]
 
     testing.assert_array_equal(
         model.get_flux_from_targets(targets, 'flux0'),
-        _get_column(0).clip(0),
+        jnp.clip(_get_column(0), min=0),
     )
     testing.assert_array_equal(
         model.get_flux_from_targets(targets, 'flux1'),
-        _get_column(1) * _get_column(0).clip(0),
+        _get_column(1) * jnp.clip(_get_column(0), min=0),
     )
     testing.assert_array_equal(
         model.get_flux_from_targets(targets, 'flux2'),
-        _get_column(2) * _get_column(0).clip(0),
+        _get_column(2) * jnp.clip(_get_column(0), min=0),
     )
 
   @parameterized.named_parameters(
