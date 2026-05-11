@@ -45,7 +45,6 @@ import jax.numpy as jnp
 # Internal import.
 # Internal import.
 
-
 # TODO(citrin): Consider moving input_features into the model config and
 # serializing it in .fistab, to support models with different feature sets.
 INPUT_FEATURES: Final[tuple[str, ...]] = (
@@ -96,6 +95,8 @@ class InputStats:
 
   mean: jax.Array
   std: jax.Array
+  min: jax.Array | None = None
+  max: jax.Array | None = None
 
 
 @dataclasses.dataclass
@@ -168,7 +169,7 @@ class FastIonStabilizationModel:
   def params(self, params: Any) -> None:
     self._params = params
 
-  def predict(self, inputs: jax.Array) -> jax.Array:
+  def predict(self, inputs: jax.Array, clip_inputs: bool = False) -> jax.Array:
     """Predicts the stabilization factor from raw (unnormalized) inputs.
 
     Input normalization is handled internally using stored input statistics.
@@ -179,12 +180,29 @@ class FastIonStabilizationModel:
     Args:
       inputs: Array of shape (..., NUM_INPUTS) with raw input features in the
         order defined by INPUT_FEATURES.
+      clip_inputs: If True, clips inputs to training boundaries stored in
+        input_stats.
 
     Returns:
       Array of shape (..., 1) with the relative ITG threshold factor.
     """
     if self._params is None:
       raise ValueError('Params have not been initialized.')
+
+    # Clip inputs to training boundaries if requested
+    if clip_inputs:
+      if (
+          self._config.input_stats.min is None
+          or self._config.input_stats.max is None
+      ):
+        raise ValueError(
+            'Clipping requested but min/max boundaries are not available in'
+            ' model config.'
+        )
+      inputs = jnp.clip(
+          inputs, self._config.input_stats.min, self._config.input_stats.max
+      )
+
     normalized = transforms.normalize(
         inputs,
         mean=jnp.array(self._config.input_stats.mean),
