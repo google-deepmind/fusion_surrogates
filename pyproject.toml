@@ -39,7 +39,7 @@ testing = [
     # Extra dependencies for testing.
     "chex",
     "isort",
-    "jaxonnxruntime",
+    "jaxonnxruntime==0.3.0",
     "onnx",
     "pytest",
     "pytest-xdist",

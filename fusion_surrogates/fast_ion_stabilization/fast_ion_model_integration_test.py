@@ -58,7 +58,7 @@ class FastIonRegistryTest(parameterized.TestCase):
     )
     self.assertEqual(model.species, 'H')
     raw_inputs = jnp.ones((1, fast_ion_model.NUM_INPUTS))
-    output = model.predict(raw_inputs)
+    output, _ = model.predict(raw_inputs)
     self.assertEqual(output.shape, (1, fast_ion_model.NUM_OUTPUTS))
 
   def test_load_he3_model(self):
@@ -69,7 +69,7 @@ class FastIonRegistryTest(parameterized.TestCase):
     )
     self.assertEqual(model.species, 'He3')
     raw_inputs = jnp.ones((1, fast_ion_model.NUM_INPUTS))
-    output = model.predict(raw_inputs)
+    output, _ = model.predict(raw_inputs)
     self.assertEqual(output.shape, (1, fast_ion_model.NUM_OUTPUTS))
 
   def test_zero_fast_ions_gives_unity_h(self):
@@ -86,7 +86,7 @@ class FastIonRegistryTest(parameterized.TestCase):
         maxval=jnp.array([3.0, 5.0, 0.15, 10.0, 10.0]),
     )
     raw_inputs = raw_inputs.at[:, n_fi_idx].set(0.0)
-    outputs = model.predict(raw_inputs)
+    outputs, _ = model.predict(raw_inputs)
     testing.assert_allclose(outputs, jnp.ones_like(outputs), atol=1e-6)
 
   @parameterized.named_parameters(
@@ -109,7 +109,7 @@ class FastIonRegistryTest(parameterized.TestCase):
         jnp.array([_SMAG, _Q, _N_FI_OVER_NE, t, _RLTI_FI])
         for t in _T_FI_OVER_TE_VALUES
     ])
-    outputs = model.predict(raw_inputs)
+    outputs, _ = model.predict(raw_inputs)
     testing.assert_allclose(
         np.array(outputs).flatten(),
         expected,
