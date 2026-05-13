@@ -22,6 +22,15 @@ from jaxonnxruntime import backend
 import numpy as np
 import onnx
 
+# TODO(b/512868079): Remove once jaxonnxruntime is updated.
+import jax.numpy as jnp
+import jaxonnxruntime.onnx_ops.clip
+def patched_onnx_clip(data, amin=None, amax=None):
+  if amin is None and amax is None:
+    return data
+  return jnp.clip(data, amin, amax)
+jaxonnxruntime.onnx_ops.clip.onnx_clip = patched_onnx_clip
+
 
 class Qlknn711OnnxTest(absltest.TestCase):
 

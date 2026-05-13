@@ -29,6 +29,8 @@ def _make_test_model(
   input_stats = fast_ion_model.InputStats(
       mean=np.array([0.5, 2.0, 0.05, 1.5, 3.0], dtype=np.float32),
       std=np.array([0.3, 1.0, 0.03, 0.5, 2.0], dtype=np.float32),
+      min=np.array([-3.0, 1.0, 0.0, 1.0, 0.0], dtype=np.float32),
+      max=np.array([1.0, 2.0, 0.08, 15.0, 50.0], dtype=np.float32),
   )
   config = fast_ion_model.FastIonStabilizationModelConfig(
       num_hiddens=2,
@@ -54,13 +56,13 @@ class FastIonStabilizationModelTest(absltest.TestCase):
         jax.random.key(1),
         shape=(batch_size, fast_ion_model.NUM_INPUTS),
     )
-    outputs = model.predict(raw_inputs)
+    outputs, _ = model.predict(raw_inputs)
     self.assertEqual(outputs.shape, (batch_size, fast_ion_model.NUM_OUTPUTS))
 
   def test_predict_output_dtype(self):
     model = _make_test_model()
     raw_inputs = jnp.ones((1, fast_ion_model.NUM_INPUTS), dtype=jnp.float32)
-    outputs = model.predict(raw_inputs)
+    outputs, _ = model.predict(raw_inputs)
     self.assertEqual(outputs.dtype, jnp.float32)
 
   def test_predict_batched(self):
@@ -69,7 +71,7 @@ class FastIonStabilizationModelTest(absltest.TestCase):
         jax.random.key(2),
         shape=(3, 5, fast_ion_model.NUM_INPUTS),
     )
-    outputs = model.predict(raw_inputs)
+    outputs, _ = model.predict(raw_inputs)
     self.assertEqual(outputs.shape, (3, 5, fast_ion_model.NUM_OUTPUTS))
 
   def test_zero_fast_ions_gives_unity(self):
@@ -81,7 +83,7 @@ class FastIonStabilizationModelTest(absltest.TestCase):
         shape=(20, fast_ion_model.NUM_INPUTS),
     )
     raw_inputs = raw_inputs.at[:, n_fi_idx].set(0.0)
-    outputs = model.predict(raw_inputs)
+    outputs, _ = model.predict(raw_inputs)
     testing.assert_allclose(np.array(outputs), np.ones_like(outputs), atol=1e-6)
 
   def test_predict_without_params_raises(self):
@@ -92,6 +94,8 @@ class FastIonStabilizationModelTest(absltest.TestCase):
         input_stats=fast_ion_model.InputStats(
             mean=np.zeros(fast_ion_model.NUM_INPUTS, dtype=np.float32),
             std=np.ones(fast_ion_model.NUM_INPUTS, dtype=np.float32),
+            min=np.full(fast_ion_model.NUM_INPUTS, -1.0, dtype=np.float32),
+            max=np.ones(fast_ion_model.NUM_INPUTS, dtype=np.float32),
         ),
     )
     model = fast_ion_model.FastIonStabilizationModel(config=config)
@@ -102,6 +106,8 @@ class FastIonStabilizationModelTest(absltest.TestCase):
     input_stats = fast_ion_model.InputStats(
         mean=np.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float32),
         std=np.array([0.1, 0.2, 0.3, 0.4, 0.5], dtype=np.float32),
+        min=np.array([-3.0, 1.0, 0.0, 1.0, 0.0], dtype=np.float32),
+        max=np.array([1.0, 2.0, 0.08, 15.0, 50.0], dtype=np.float32),
     )
     config = fast_ion_model.FastIonStabilizationModelConfig(
         num_hiddens=3,
@@ -131,8 +137,8 @@ class FastIonStabilizationModelTest(absltest.TestCase):
         jax.random.key(5),
         shape=(5, fast_ion_model.NUM_INPUTS),
     )
-    outputs_1 = model.predict(raw_inputs)
-    outputs_2 = model.predict(raw_inputs)
+    outputs_1, _ = model.predict(raw_inputs)
+    outputs_2, _ = model.predict(raw_inputs)
     testing.assert_array_equal(np.array(outputs_1), np.array(outputs_2))
 
   def test_export_import_round_trip(self):
@@ -141,13 +147,13 @@ class FastIonStabilizationModelTest(absltest.TestCase):
         jax.random.key(6),
         shape=(5, fast_ion_model.NUM_INPUTS),
     )
-    original_outputs = model.predict(raw_inputs)
+    original_outputs, _ = model.predict(raw_inputs)
     with tempfile.NamedTemporaryFile(suffix='.fistab') as f:
       model.export_model(f.name)
       loaded = fast_ion_model.FastIonStabilizationModel.load_model_from_path(
           f.name, 'test_model'
       )
-    loaded_outputs = loaded.predict(raw_inputs)
+    loaded_outputs, _ = loaded.predict(raw_inputs)
     testing.assert_array_equal(
         np.array(original_outputs), np.array(loaded_outputs)
     )
@@ -157,6 +163,44 @@ class FastIonStabilizationModelTest(absltest.TestCase):
     testing.assert_array_equal(
         np.array(loaded.config.input_stats.mean),
         np.array(model.config.input_stats.mean),
+    )
+
+  def test_predict_with_clipping_info(self):
+    model = _make_test_model()
+    # InputStats in _make_test_model has:
+    # min=[-3.0, 1.0, 0.0, 1.0, 0.0]
+    # max=[1.0, 2.0, 0.08, 15.0, 50.0]
+
+    # Create inputs where:
+    # Feature 0 is below min (-4.0)
+    # Feature 1 is above max (3.0)
+    # Feature 2 is within bounds (0.05)
+    # Feature 3 is within bounds (1.5)
+    # Feature 4 is within bounds (3.0)
+    raw_inputs = jnp.array([[-4.0, 3.0, 0.05, 1.5, 3.0]], dtype=jnp.float32)
+
+    outputs, clipping_info = model.predict(raw_inputs, clip_inputs=True)
+
+    expected_clipping_info = jnp.array([[-1, 1, 0, 0, 0]], dtype=jnp.int32)
+    testing.assert_array_equal(
+        np.array(clipping_info), np.array(expected_clipping_info)
+    )
+
+    # Verify that output is same as if we clipped manually
+    clipped_inputs = jnp.array([[-3.0, 2.0, 0.05, 1.5, 3.0]], dtype=jnp.float32)
+    expected_outputs, _ = model.predict(clipped_inputs)
+    testing.assert_array_equal(np.array(outputs), np.array(expected_outputs))
+
+  def test_predict_with_clipping_info_no_clip(self):
+    model = _make_test_model()
+    raw_inputs = jnp.array([[-4.0, 3.0, 0.05, 1.5, 3.0]], dtype=jnp.float32)
+
+    _, clipping_info = model.predict(raw_inputs, clip_inputs=False)
+
+    # OOD mask should still be populated even if clip_inputs is False
+    expected_clipping_info = jnp.array([[-1, 1, 0, 0, 0]], dtype=jnp.int32)
+    testing.assert_array_equal(
+        np.array(clipping_info), np.array(expected_clipping_info)
     )
 
 

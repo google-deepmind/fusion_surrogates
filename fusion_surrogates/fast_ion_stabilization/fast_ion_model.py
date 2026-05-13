@@ -45,7 +45,6 @@ import jax.numpy as jnp
 # Internal import.
 # Internal import.
 
-
 # TODO(citrin): Consider moving input_features into the model config and
 # serializing it in .fistab, to support models with different feature sets.
 INPUT_FEATURES: Final[tuple[str, ...]] = (
@@ -96,6 +95,8 @@ class InputStats:
 
   mean: jax.Array
   std: jax.Array
+  min: jax.Array
+  max: jax.Array
 
 
 @dataclasses.dataclass
@@ -168,7 +169,11 @@ class FastIonStabilizationModel:
   def params(self, params: Any) -> None:
     self._params = params
 
-  def predict(self, inputs: jax.Array) -> jax.Array:
+  def predict(
+      self,
+      inputs: jax.Array,
+      clip_inputs: bool = False,
+  ) -> tuple[jax.Array, jax.Array]:
     """Predicts the stabilization factor from raw (unnormalized) inputs.
 
     Input normalization is handled internally using stored input statistics.
@@ -179,18 +184,36 @@ class FastIonStabilizationModel:
     Args:
       inputs: Array of shape (..., NUM_INPUTS) with raw input features in the
         order defined by INPUT_FEATURES.
+      clip_inputs: If True, clips inputs to training boundaries stored in
+        input_stats.
 
     Returns:
-      Array of shape (..., 1) with the relative ITG threshold factor.
+      A tuple of:
+        - Array of shape (..., 1) with the relative ITG threshold factor.
+        - Integer array of shape (..., NUM_INPUTS) indicating if input features
+          are out of distribution:
+          -1 for below min, 1 for above max, 0 for within training distribution.
     """
     if self._params is None:
       raise ValueError('Params have not been initialized.')
+
+    low_mask = inputs < self._config.input_stats.min
+    high_mask = inputs > self._config.input_stats.max
+    ood_mask = high_mask.astype(jnp.int32) - low_mask.astype(jnp.int32)
+
+    if clip_inputs:
+      inputs = jnp.clip(
+          inputs, self._config.input_stats.min, self._config.input_stats.max
+      )
+
     normalized = transforms.normalize(
         inputs,
         mean=jnp.array(self._config.input_stats.mean),
         stddev=jnp.array(self._config.input_stats.std),
     )
-    return self._network.apply(self._params, normalized)
+    output = self._network.apply(self._params, normalized)
+
+    return output, ood_mask
 
   def export_model(self, output_path: str) -> None:
     """Exports the model to a .fistab file."""
