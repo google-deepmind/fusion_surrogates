@@ -270,7 +270,7 @@ class QLKNNModel:
           mean=self._config.stats_data.input_mean,
           stddev=self._config.stats_data.input_stddev,
       )
-    return self._network.apply(params, inputs)
+    return self._network.apply(params, inputs)  # pyrefly: ignore[bad-argument-type, bad-return]
 
   def predict_targets(self, inputs: jax.Array) -> jax.Array:
     """Predicts the targets given the inputs.
@@ -347,9 +347,9 @@ class QLKNNModel:
         networks.NetworkType.MLP,
         networks.NetworkType.DISJOINT_MLPS,
     ]:
-      network_kwargs['num_targets'] = self.num_targets
+      network_kwargs['num_targets'] = self.num_targets  # pyrefly: ignore[bad-assignment]
     elif self._config.network_type == networks.NetworkType.CGM:
-      network_kwargs['driving_gradient_index_map'] = {
+      network_kwargs['driving_gradient_index_map'] = {  # pyrefly: ignore[bad-assignment]
           'Ate': self._config.input_names.index('Ate'),
           'Ati': self._config.input_names.index('Ati'),
       }
