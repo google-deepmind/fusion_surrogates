@@ -213,7 +213,7 @@ class FastIonStabilizationModel:
     )
     output = self._network.apply(self._params, normalized)
 
-    return output, ood_mask
+    return output, ood_mask  # pyrefly: ignore[bad-return]
 
   def export_model(self, output_path: str) -> None:
     """Exports the model to a .fistab file."""
