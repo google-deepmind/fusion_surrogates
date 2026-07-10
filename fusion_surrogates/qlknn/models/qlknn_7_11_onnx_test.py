@@ -43,10 +43,15 @@ class Qlknn711OnnxTest(absltest.TestCase):
 
     jax_model = qlknn_model.QLKNNModel.load_model_from_name("qlknn_7_11_v1")
 
+    # Generate batch of random inputs within model ranges
     batch_size = 100
-    test_input = np.random.randn(batch_size, jax_model.num_inputs).astype(
-        np.float32
-    )
+    mins = [v["min"] for v in jax_model.inputs_and_ranges.values()]
+    maxs = [v["max"] for v in jax_model.inputs_and_ranges.values()]
+    test_input = np.random.uniform(
+        mins,
+        maxs,
+        size=(batch_size, len(mins))
+    ).astype(np.float32)
 
     # Running the ONNX model using jaxonnxruntime.
     jax_model_from_onnx = backend.prepare(onnx_model)
