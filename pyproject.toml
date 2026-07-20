@@ -30,7 +30,7 @@ dependencies = [
 [project.optional-dependencies]
 
 tglfnnukaea = [
-    "tglfnn_ukaea==0.1.0",
+    "tglfnn_ukaea==0.2.0",
 ]
 
 testing = [
