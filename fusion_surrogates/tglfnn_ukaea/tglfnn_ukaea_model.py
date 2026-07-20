@@ -55,8 +55,10 @@ class TGLFNNukaeaModel:
     self.input_labels = model_dict["input_labels"]
     self.output_labels = tuple(model_dict["params"].keys())
 
-    self._network = networks.GaussianMLPEnsemble(
-        n_ensemble=model_dict["config"].get("num_estimators", 5),
+    # The ensemble is applied by vmapping a single GaussianMLP over stacked
+    # member parameters.
+    self.n_ensemble = model_dict["config"].get("num_estimators", 5)
+    self._network = networks.GaussianMLP(
         num_hiddens=model_dict["config"].get("model_size", 6),
         hidden_size=model_dict["config"].get("hidden_size", 512),
         dropout=model_dict["config"].get("dropout", 0.0),
@@ -66,14 +68,13 @@ class TGLFNNukaeaModel:
     # Construct a PyTree of parameters
     # - Transposed weights compared to the original model
     # - The following label changes:
-    #   "MLP_{i}" -> "GaussianMLP_{i}"
     #   "FullyConnectedLayer_{i}" -> "Dense_{i}"
     #   "weight" -> "kernel"
-    # - Stacked for vmapping
+    # - Stacked for vmapping, with leading axes (n_outputs, n_ensemble)
     params = {}
     for output_label in self.output_labels:
-      ensemble = {}
-      for i in range(self._network.n_ensemble):
+      ensemble = []
+      for i in range(self.n_ensemble):
         network_params = {}
         for j in range(self._network.num_hiddens):
           layer_params = {}
@@ -83,9 +84,12 @@ class TGLFNNukaeaModel:
           layer_params["bias"] = jnp.array(original_layer_params["bias"].T)
           layer_params["kernel"] = jnp.array(original_layer_params["weight"].T)
           network_params[f"Dense_{j}"] = layer_params
-        ensemble[f"GaussianMLP_{i}"] = network_params
-      params[output_label] = ensemble
-    # Stack the parameters
+        ensemble.append(network_params)
+      # Stack the parameters of all ensemble members for this output
+      params[output_label] = jax.tree.map(
+          lambda *args: jnp.stack(args), *ensemble
+      )
+    # Stack the outputs
     self._params = jax.tree.map(
         lambda *args: jnp.stack(args),
         *[params[label] for label in self.output_labels],
@@ -124,13 +128,25 @@ class TGLFNNukaeaModel:
         stddev=self._input_stds,
     )
 
-    normalized_predictions = jax.vmap(
-        lambda params: self._network.apply(
-            {"params": params},
-            normalized_inputs,
-            deterministic=True,
-        ),
+    # Vmap over the output and ensemble axes of the stacked parameters,
+    # giving predictions of shape (n_outputs, n_ensemble, ..., 2).
+    predictions = jax.vmap(
+        jax.vmap(
+            lambda params: self._network.apply(
+                {"params": params},
+                normalized_inputs,
+                deterministic=True,
+            ),
+        )
     )(self._params)
+
+    # Combine the ensemble members
+    mean = jnp.mean(predictions[..., 0], axis=1)
+    # Aleatoric uncertainty = mean of the predicted variances
+    aleatoric = jnp.mean(predictions[..., 1], axis=1)
+    # Epistemic uncertainty = variance of the predicted means
+    epistemic = jnp.var(predictions[..., 0], axis=1)
+    normalized_predictions = jnp.stack([mean, aleatoric + epistemic], axis=-1)
 
     broadcast_means = jnp.expand_dims(
         self._output_means,
