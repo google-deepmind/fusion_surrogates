@@ -81,8 +81,12 @@ class TGLFNNukaeaModel:
           original_layer_params = model_dict["params"][output_label][
               f"MLP_{i}"
           ][f"FullyConnectedLayer_{j}"]
-          layer_params["bias"] = jnp.array(original_layer_params["bias"].T)
-          layer_params["kernel"] = jnp.array(original_layer_params["weight"].T)
+          layer_params["bias"] = jnp.asarray(
+              original_layer_params["bias"].T, dtype=jnp.float32
+          )
+          layer_params["kernel"] = jnp.asarray(
+              original_layer_params["weight"].T, dtype=jnp.float32
+          )
           network_params[f"Dense_{j}"] = layer_params
         ensemble.append(network_params)
       # Stack the parameters of all ensemble members for this output
@@ -95,35 +99,50 @@ class TGLFNNukaeaModel:
         *[params[label] for label in self.output_labels],
     )
 
-    # Vectorize the stats
-    self._input_means = jnp.array([
-        v["mean"]
-        for k, v in model_dict["stats"].items()
-        if k in self.input_labels
-    ])
-    self._input_stds = jnp.array([
-        v["std"]
-        for k, v in model_dict["stats"].items()
-        if k in self.input_labels
-    ])
-    self._output_means = jnp.array([
-        v["mean"]
-        for k, v in model_dict["stats"].items()
-        if k in self.output_labels
-    ])
-    self._output_stds = jnp.array([
-        v["std"]
-        for k, v in model_dict["stats"].items()
-        if k in self.output_labels
-    ])
+    # Vectorize the stats, casting to f32.
+    self._input_means = jnp.array(
+        [
+            v["mean"]
+            for k, v in model_dict["stats"].items()
+            if k in self.input_labels
+        ],
+        dtype=jnp.float32,
+    )
+    self._input_stds = jnp.array(
+        [
+            v["std"]
+            for k, v in model_dict["stats"].items()
+            if k in self.input_labels
+        ],
+        dtype=jnp.float32,
+    )
+    self._output_means = jnp.array(
+        [
+            v["mean"]
+            for k, v in model_dict["stats"].items()
+            if k in self.output_labels
+        ],
+        dtype=jnp.float32,
+    )
+    self._output_stds = jnp.array(
+        [
+            v["std"]
+            for k, v in model_dict["stats"].items()
+            if k in self.output_labels
+        ],
+        dtype=jnp.float32,
+    )
 
     # __init__ method is done, activate immutability
     self._frozen = True
 
   def predict(self, inputs: jax.Array) -> Mapping[str, jax.Array]:
     """Predicts mean and variance of each flux."""
+    input_dtype = inputs.dtype
+
+    # Normalize and explicitly cast to f32 for inference.
     normalized_inputs = transforms.normalize(
-        inputs,
+        inputs.astype(jnp.float32),
         mean=self._input_means,
         stddev=self._input_stds,
     )
@@ -156,9 +175,11 @@ class TGLFNNukaeaModel:
         self._output_stds,
         axis=tuple(range(1, normalized_predictions.ndim)),
     )
+
+    # Unnormalize and explicitly cast back to original dtype.
     predictions = transforms.unnormalize(
         normalized_predictions, mean=broadcast_means, stddev=broadcast_stds
-    )
+    ).astype(input_dtype)
 
     return {label: predictions[i] for i, label in enumerate(self.output_labels)}
 
