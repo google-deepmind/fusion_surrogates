@@ -160,11 +160,11 @@ class TGLFNNukaeaModel:
     )(self._params)
 
     # Combine the ensemble members
-    mean = jnp.mean(predictions[..., 0], axis=1)
+    mean = jnp.mean(predictions[..., 0], axis=1)  # pyrefly: ignore[bad-index]
     # Aleatoric uncertainty = mean of the predicted variances
-    aleatoric = jnp.mean(predictions[..., 1], axis=1)
+    aleatoric = jnp.mean(predictions[..., 1], axis=1)  # pyrefly: ignore[bad-index]
     # Epistemic uncertainty = variance of the predicted means
-    epistemic = jnp.var(predictions[..., 0], axis=1)
+    epistemic = jnp.var(predictions[..., 0], axis=1)  # pyrefly: ignore[bad-index]
     normalized_predictions = jnp.stack([mean, aleatoric + epistemic], axis=-1)
 
     broadcast_means = jnp.expand_dims(
