@@ -162,18 +162,25 @@ class TGLFNNukaeaModel:
     # Combine the ensemble members
     mean = jnp.mean(predictions[..., 0], axis=1)  # pyrefly: ignore[bad-index]
     # Aleatoric uncertainty = mean of the predicted variances
-    aleatoric = jnp.mean(predictions[..., 1], axis=1)  # pyrefly: ignore[bad-index]
+    aleatoric = jnp.mean(
+        predictions[..., 1], axis=1
+    )  # pyrefly: ignore[bad-index]
     # Epistemic uncertainty = variance of the predicted means
-    epistemic = jnp.var(predictions[..., 0], axis=1)  # pyrefly: ignore[bad-index]
+    epistemic = jnp.var(
+        predictions[..., 0], axis=1
+    )  # pyrefly: ignore[bad-index]
     normalized_predictions = jnp.stack([mean, aleatoric + epistemic], axis=-1)
 
+    # Variances have no mean offset and scale with the squared stddev.
     broadcast_means = jnp.expand_dims(
-        self._output_means,
-        axis=tuple(range(1, normalized_predictions.ndim)),
+        jnp.stack(
+            [self._output_means, jnp.zeros_like(self._output_means)], axis=-1
+        ),
+        axis=tuple(range(1, normalized_predictions.ndim - 1)),
     )
     broadcast_stds = jnp.expand_dims(
-        self._output_stds,
-        axis=tuple(range(1, normalized_predictions.ndim)),
+        jnp.stack([self._output_stds, self._output_stds**2], axis=-1),
+        axis=tuple(range(1, normalized_predictions.ndim - 1)),
     )
 
     # Unnormalize and explicitly cast back to original dtype.
