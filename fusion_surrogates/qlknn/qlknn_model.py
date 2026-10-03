@@ -193,7 +193,7 @@ class QLKNNModel:
     return self._metadata.path
 
   @property
-  def name(self) -> str | None:
+  def name(self) -> str:
     return self._metadata.name
 
   @property
@@ -387,7 +387,8 @@ class QLKNNModel:
   ) -> 'QLKNNModel':
     """Loads a QLKNNModel from a file."""
     logging.info('Loading QLKNNModel from %s', input_path)
-    with open(input_path, 'rb') as f:
+    open_fn = open
+    with open_fn(input_path, 'rb') as f:
       import_dict = serialization.msgpack_restore(f.read())
     if model_name is None:
       model_name = ''
