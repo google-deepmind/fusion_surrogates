@@ -22,6 +22,7 @@ from fusion_surrogates.tglfnn_ukaea import tglfnn_ukaea_model
 import jax
 import jax.numpy as jnp
 import numpy as np
+import tglfnn_ukaea as tglfnn_ukaea_lib
 
 
 class TGLFNNukaeaModelTest(parameterized.TestCase):
@@ -107,6 +108,48 @@ class TGLFNNukaeaModelTest(parameterized.TestCase):
           result[..., 1], (1.0 + np.log(2.0)) * scale**2, rtol=1e-6
       )
       self.assertTrue(np.all(result[..., 1] >= 0.0))
+
+  def test_variance_includes_epsilon(self):
+    """Each member's variance includes the epsilon of the original models."""
+    # pylint: disable=protected-access
+    model = tglfnn_ukaea_model.TGLFNNukaeaModel(machine="multimachine")
+    inputs = jnp.asarray(
+        np.random.default_rng(0).normal(
+            model._input_means, model._input_stds, size=(100, 13)
+        )
+    )
+    predictions = model.predict(inputs)
+    for i, label in enumerate(model.output_labels):
+      self.assertTrue(
+          np.all(
+              predictions[label][..., 1]
+              >= 0.99
+              * tglfnn_ukaea_model._VARIANCE_EPSILON
+              * model._output_stds[i] ** 2
+          )
+      )
+
+  def test_stats_follow_labels(self):
+    """The normalisations do not depend on the order of the stats dict."""
+    model_dict = tglfnn_ukaea_lib.load("multimachine")
+    reordered = dict(model_dict)
+    reordered["stats"] = dict(reversed(list(model_dict["stats"].items())))
+
+    model = tglfnn_ukaea_model.TGLFNNukaeaModel(machine="multimachine")
+    with mock.patch.object(
+        tglfnn_ukaea_model.tglfnn_ukaea_lib, "load", return_value=reordered
+    ):
+      reordered_model = tglfnn_ukaea_model.TGLFNNukaeaModel(
+          machine="multimachine"
+      )
+
+    inputs = jnp.ones((4, 13))
+    predictions = model.predict(inputs)
+    reordered_predictions = reordered_model.predict(inputs)
+    for label in model.output_labels:
+      np.testing.assert_array_equal(
+          predictions[label], reordered_predictions[label]
+      )
 
 
 if __name__ == "__main__":

@@ -34,7 +34,12 @@ from fusion_surrogates.common import networks
 from fusion_surrogates.common import transforms
 import jax
 import jax.numpy as jnp
+import numpy as np
 import tglfnn_ukaea as tglfnn_ukaea_lib
+
+# Added to the variance predicted by each ensemble member, as in the original
+# ONNX/TorchScript models.
+_VARIANCE_EPSILON = 1e-6
 
 
 class TGLFNNukaeaModel:
@@ -43,6 +48,11 @@ class TGLFNNukaeaModel:
   This object is intended for use as static argument to jitted Jax
   functions. It therefore is immutable and hashes by value,
   not id.
+
+  The numerics follow the original ONNX/TorchScript models: the input and
+  output normalisations are applied in float64 (when JAX x64 is enabled) around
+  the float32 network, and a small epsilon is added to each ensemble member's
+  predicted variance.
   """
 
   def __init__(
@@ -99,38 +109,20 @@ class TGLFNNukaeaModel:
         *[params[label] for label in self.output_labels],
     )
 
-    # Vectorize the stats, casting to f32.
-    self._input_means = jnp.array(
-        [
-            v["mean"]
-            for k, v in model_dict["stats"].items()
-            if k in self.input_labels
-        ],
-        dtype=jnp.float32,
+    # Vectorize the stats in label order. These are kept in float64 and cast
+    # to the normalisation dtype in predict.
+    stats = model_dict["stats"]
+    self._input_means = np.array(
+        [stats[label]["mean"] for label in self.input_labels], dtype=np.float64
     )
-    self._input_stds = jnp.array(
-        [
-            v["std"]
-            for k, v in model_dict["stats"].items()
-            if k in self.input_labels
-        ],
-        dtype=jnp.float32,
+    self._input_stds = np.array(
+        [stats[label]["std"] for label in self.input_labels], dtype=np.float64
     )
-    self._output_means = jnp.array(
-        [
-            v["mean"]
-            for k, v in model_dict["stats"].items()
-            if k in self.output_labels
-        ],
-        dtype=jnp.float32,
+    self._output_means = np.array(
+        [stats[label]["mean"] for label in self.output_labels], dtype=np.float64
     )
-    self._output_stds = jnp.array(
-        [
-            v["std"]
-            for k, v in model_dict["stats"].items()
-            if k in self.output_labels
-        ],
-        dtype=jnp.float32,
+    self._output_stds = np.array(
+        [stats[label]["std"] for label in self.output_labels], dtype=np.float64
     )
 
     # __init__ method is done, activate immutability
@@ -139,13 +131,17 @@ class TGLFNNukaeaModel:
   def predict(self, inputs: jax.Array) -> Mapping[str, jax.Array]:
     """Predicts mean and variance of each flux."""
     input_dtype = inputs.dtype
-
-    # Normalize and explicitly cast to f32 for inference.
-    normalized_inputs = transforms.normalize(
-        inputs.astype(jnp.float32),
-        mean=self._input_means,
-        stddev=self._input_stds,
+    # Normalise in float64 if available (otherwise float32), and run the
+    # network in float32.
+    stats_dtype = jnp.promote_types(
+        input_dtype, jax.dtypes.canonicalize_dtype(jnp.float64)
     )
+
+    normalized_inputs = transforms.normalize(
+        inputs.astype(stats_dtype),
+        mean=jnp.asarray(self._input_means, dtype=stats_dtype),
+        stddev=jnp.asarray(self._input_stds, dtype=stats_dtype),
+    ).astype(jnp.float32)
 
     # Vmap over the output and ensemble axes of the stacked parameters,
     # giving predictions of shape (n_outputs, n_ensemble, ..., 2).
@@ -169,17 +165,19 @@ class TGLFNNukaeaModel:
     epistemic = jnp.var(
         predictions[..., 0], axis=1
     )  # pyrefly: ignore[bad-index]
-    normalized_predictions = jnp.stack([mean, aleatoric + epistemic], axis=-1)
+    normalized_predictions = jnp.stack(
+        [mean, aleatoric + _VARIANCE_EPSILON + epistemic], axis=-1
+    ).astype(stats_dtype)
 
     # Variances have no mean offset and scale with the squared stddev.
+    output_means = jnp.asarray(self._output_means, dtype=stats_dtype)
+    output_stds = jnp.asarray(self._output_stds, dtype=stats_dtype)
     broadcast_means = jnp.expand_dims(
-        jnp.stack(
-            [self._output_means, jnp.zeros_like(self._output_means)], axis=-1
-        ),
+        jnp.stack([output_means, jnp.zeros_like(output_means)], axis=-1),
         axis=tuple(range(1, normalized_predictions.ndim - 1)),
     )
     broadcast_stds = jnp.expand_dims(
-        jnp.stack([self._output_stds, self._output_stds**2], axis=-1),
+        jnp.stack([output_stds, output_stds**2], axis=-1),
         axis=tuple(range(1, normalized_predictions.ndim - 1)),
     )
 
