@@ -68,27 +68,22 @@ class TGLFNNukaeaModelTest(parameterized.TestCase):
   ):
     # Two equally weighted members have means 1 and 3, variance log(2).
     model_dict = {
-        "input_labels": ["input_a", "input_b"],
-        "config": {"num_estimators": 2, "model_size": 1},
-        "params": {
-            label: {
-                f"MLP_{i}": {
-                    "FullyConnectedLayer_0": {
-                        "weight": np.zeros((2, 2)),
-                        "bias": np.array([mean, 0.0]),
-                    }
-                }
-                for i, mean in enumerate((1.0, 3.0))
-            }
-            for label in ("flux_a", "flux_b")
-        },
-        "stats": {
-            "input_a": {"mean": 0.0, "std": 1.0},
-            "input_b": {"mean": 0.0, "std": 1.0},
-            "flux_a": {"mean": -10.0, "std": 3.0},
-            "flux_b": {"mean": 5.0, "std": 0.0},
-        },
+        "version": np.array("3.2.1"),
+        "input_labels": np.array(["input_a", "input_b"]),
+        "output_labels": np.array(["flux_a", "flux_b"]),
+        "input_mean": np.zeros((2, 2)),
+        "input_std": np.ones((2, 2)),
+        "output_mean": np.array([-10.0, 5.0]),
+        "output_std": np.array([3.0, 0.0]),
+        "variance_epsilon": np.zeros(2, dtype=np.float32),
+        "num_estimators": np.array([2, 2]),
+        "num_layers": np.array([1, 1]),
+        "hidden_size": np.array([2, 2]),
+        "activation": np.array("relu"),
     }
+    for label in ("flux_a", "flux_b"):
+      model_dict[f"{label}/layer_0/weight"] = np.zeros((2, 2, 2))
+      model_dict[f"{label}/layer_0/bias"] = np.array([[1.0, 0.0], [3.0, 0.0]])
     self.addCleanup(jax.config.update, "jax_enable_x64", jax.config.x64_enabled)
     jax.config.update("jax_enable_x64", True)
     with mock.patch.object(
@@ -109,46 +104,30 @@ class TGLFNNukaeaModelTest(parameterized.TestCase):
       )
       self.assertTrue(np.all(result[..., 1] >= 0.0))
 
-  def test_variance_includes_epsilon(self):
-    """Each member's variance includes the epsilon of the original models."""
+  @parameterized.parameters("multimachine", "step")
+  def test_matches_onnx(self, machine):
+    """The model reproduces the original ONNX models."""
     # pylint: disable=protected-access
-    model = tglfnn_ukaea_model.TGLFNNukaeaModel(machine="multimachine")
-    inputs = jnp.asarray(
-        np.random.default_rng(0).normal(
-            model._input_means, model._input_stds, size=(100, 13)
-        )
-    )
-    predictions = model.predict(inputs)
+    model = tglfnn_ukaea_model.TGLFNNukaeaModel(machine=machine)
+    # Reference outputs of the ONNX models, distributed with the weights.
+    reference = tglfnn_ukaea_lib.load_reference(machine, model.version)
+    predictions = model.predict(jnp.asarray(reference["inputs"]))
     for i, label in enumerate(model.output_labels):
-      self.assertTrue(
-          np.all(
-              predictions[label][..., 1]
-              >= 0.99
-              * tglfnn_ukaea_model._VARIANCE_EPSILON
-              * model._output_stds[i] ** 2
-          )
+      expected = reference[label]
+      output_std = model._output_stds[i]
+      np.testing.assert_allclose(
+          predictions[label][..., 0],
+          expected[..., 0],
+          rtol=0,
+          atol=1e-4 * output_std,
       )
-
-  def test_stats_follow_labels(self):
-    """The normalisations do not depend on the order of the stats dict."""
-    model_dict = tglfnn_ukaea_lib.load("multimachine")
-    reordered = dict(model_dict)
-    reordered["stats"] = dict(reversed(list(model_dict["stats"].items())))
-
-    model = tglfnn_ukaea_model.TGLFNNukaeaModel(machine="multimachine")
-    with mock.patch.object(
-        tglfnn_ukaea_model.tglfnn_ukaea_lib, "load", return_value=reordered
-    ):
-      reordered_model = tglfnn_ukaea_model.TGLFNNukaeaModel(
-          machine="multimachine"
-      )
-
-    inputs = jnp.ones((4, 13))
-    predictions = model.predict(inputs)
-    reordered_predictions = reordered_model.predict(inputs)
-    for label in model.output_labels:
-      np.testing.assert_array_equal(
-          predictions[label], reordered_predictions[label]
+      # Where the ensemble members agree, the ONNX models' variance is only
+      # defined to float32 rounding (they compute it as E[x^2] - E[x]^2).
+      np.testing.assert_allclose(
+          predictions[label][..., 1],
+          expected[..., 1],
+          rtol=1e-2,
+          atol=1e-6 * output_std**2,
       )
 
 
