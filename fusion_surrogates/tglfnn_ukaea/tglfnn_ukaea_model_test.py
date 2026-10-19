@@ -34,6 +34,11 @@ class TGLFNNukaeaModelTest(parameterized.TestCase):
           expected_output_shape=(10, 2),
       ),
       dict(
+          testcase_name="single_point_inputs",
+          input_shape=(13,),
+          expected_output_shape=(2,),
+      ),
+      dict(
           testcase_name="single_batch_dimension",
           input_shape=(1, 3, 13),
           expected_output_shape=(1, 3, 2),
