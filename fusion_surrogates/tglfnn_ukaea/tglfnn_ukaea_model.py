@@ -28,19 +28,22 @@
 
 """JAX implementation of UKAEA's TGLFNN model."""
 
-from typing import Any, Literal, Mapping
+from collections.abc import Mapping
+from typing import Any, Literal
 
 from fusion_surrogates.common import networks
 from fusion_surrogates.common import transforms
 import jax
 import jax.numpy as jnp
+import numpy as np
 import tglfnn_ukaea as tglfnn_ukaea_lib
 
 
 class TGLFNNukaeaModel:
   """UKAEA TGLF surrogate.
 
-  This object is intended for use as static argument to jitted Jax
+  This implementation is based on the original ONNX models.
+  This object is intended for use as static argument to jitted JAX
   functions. It therefore is immutable and hashes by value,
   not id.
   """
@@ -48,149 +51,193 @@ class TGLFNNukaeaModel:
   def __init__(
       self,
       machine: Literal["step", "multimachine"] = "multimachine",
+      version: str | None = None,
   ):
-    self.machine = machine
-    model_dict = tglfnn_ukaea_lib.load(machine)
+    """Loads the network.
 
-    self.input_labels = model_dict["input_labels"]
-    self.output_labels = tuple(model_dict["params"].keys())
+    Args:
+      machine: The machine the network was trained for.
+      version: The version of the network to load. If None, uses
+        `tglfnn_ukaea.DEFAULT_VERSIONS[machine]`.
+    """
+    self._machine: Literal["step", "multimachine"] = machine
+    model_dict = tglfnn_ukaea_lib.load(machine, version=version)
+    self._version: str = model_dict["version"].item()
+    self._input_labels: tuple[str, ...] = tuple(
+        model_dict["input_labels"].tolist()
+    )
+    self._output_labels: tuple[str, ...] = tuple(
+        model_dict["output_labels"].tolist()
+    )
+    self._variance_epsilon: jax.Array = jnp.asarray(
+        model_dict["variance_epsilon"], dtype=jnp.float32
+    )
 
-    # The ensemble is applied by vmapping a single GaussianMLP over stacked
-    # member parameters.
-    self.n_ensemble = model_dict["config"].get("num_estimators", 5)
+    # The outputs and ensemble members are applied by vmapping a single
+    # GaussianMLP over stacked parameters, so all outputs must share the same
+    # architecture.
+    for key in ("num_estimators", "num_layers", "hidden_size"):
+      if len(np.unique(model_dict[key])) != 1:
+        raise ValueError(
+            f"{key} differs between outputs ({model_dict[key]}), which is not"
+            " supported"
+        )
+    self._n_ensemble: int = model_dict["num_estimators"][0].item()
     self._network = networks.GaussianMLP(
-        num_hiddens=model_dict["config"].get("model_size", 6),
-        hidden_size=model_dict["config"].get("hidden_size", 512),
-        dropout=model_dict["config"].get("dropout", 0.0),
-        activation=model_dict["config"].get("activation", "relu"),
+        num_hiddens=model_dict["num_layers"][0].item(),
+        hidden_size=model_dict["hidden_size"][0].item(),
+        dropout=0.0,  # Only used for training
+        activation=model_dict["activation"].item(),
     )
 
     # Construct a PyTree of parameters
-    # - Transposed weights compared to the original model
-    # - The following label changes:
-    #   "FullyConnectedLayer_{i}" -> "Dense_{i}"
-    #   "weight" -> "kernel"
+    # - Weights are stored per layer as (n_ensemble, out, in), i.e. transposed
+    #   compared to the flax kernel
+    # - "{output}/layer_{j}/{weight,bias}" -> "Dense_{j}/{kernel,bias}"
     # - Stacked for vmapping, with leading axes (n_outputs, n_ensemble)
-    params = {}
-    for output_label in self.output_labels:
-      ensemble = []
-      for i in range(self.n_ensemble):
-        network_params = {}
-        for j in range(self._network.num_hiddens):
-          layer_params = {}
-          original_layer_params = model_dict["params"][output_label][
-              f"MLP_{i}"
-          ][f"FullyConnectedLayer_{j}"]
-          layer_params["bias"] = jnp.asarray(
-              original_layer_params["bias"].T, dtype=jnp.float32
-          )
-          layer_params["kernel"] = jnp.asarray(
-              original_layer_params["weight"].T, dtype=jnp.float32
-          )
-          network_params[f"Dense_{j}"] = layer_params
-        ensemble.append(network_params)
-      # Stack the parameters of all ensemble members for this output
-      params[output_label] = jax.tree.map(
-          lambda *args: jnp.stack(args), *ensemble
-      )
-    # Stack the outputs
-    self._params = jax.tree.map(
-        lambda *args: jnp.stack(args),
-        *[params[label] for label in self.output_labels],
-    )
+    # - Stack on CPU in numpy, then convert to JAX arrays in float32.
+    self._params = {
+        f"Dense_{j}": {
+            "kernel": jnp.asarray(
+                np.stack([
+                    model_dict[f"{label}/layer_{j}/weight"]
+                    for label in self.output_labels
+                ]).swapaxes(-1, -2),
+                dtype=jnp.float32,
+            ),
+            "bias": jnp.asarray(
+                np.stack([
+                    model_dict[f"{label}/layer_{j}/bias"]
+                    for label in self.output_labels
+                ]),
+                dtype=jnp.float32,
+            ),
+        }
+        for j in range(self._network.num_hiddens)
+    }
 
-    # Vectorize the stats, casting to f32.
-    self._input_means = jnp.array(
-        [
-            v["mean"]
-            for k, v in model_dict["stats"].items()
-            if k in self.input_labels
-        ],
-        dtype=jnp.float32,
+    # The input stats are (n_outputs, n_inputs) and the output stats
+    # (n_outputs,), stored in float64 to match the ONNX models.
+    self._input_means = jnp.asarray(model_dict["input_mean"], dtype=jnp.float64)
+    self._input_stds = jnp.asarray(model_dict["input_std"], dtype=jnp.float64)
+    self._output_means = jnp.asarray(
+        model_dict["output_mean"], dtype=jnp.float64
     )
-    self._input_stds = jnp.array(
-        [
-            v["std"]
-            for k, v in model_dict["stats"].items()
-            if k in self.input_labels
-        ],
-        dtype=jnp.float32,
-    )
-    self._output_means = jnp.array(
-        [
-            v["mean"]
-            for k, v in model_dict["stats"].items()
-            if k in self.output_labels
-        ],
-        dtype=jnp.float32,
-    )
-    self._output_stds = jnp.array(
-        [
-            v["std"]
-            for k, v in model_dict["stats"].items()
-            if k in self.output_labels
-        ],
-        dtype=jnp.float32,
-    )
+    self._output_stds = jnp.asarray(model_dict["output_std"], dtype=jnp.float64)
 
     # __init__ method is done, activate immutability
     self._frozen = True
 
+  @property
+  def machine(self) -> Literal["step", "multimachine"]:
+    """The machine the network was trained for."""
+    return self._machine
+
+  @property
+  def version(self) -> str:
+    """TGLFNN-UKAEA model version number."""
+    return self._version
+
+  @property
+  def input_labels(self) -> tuple[str, ...]:
+    """Ordered tuple of input feature names."""
+    return self._input_labels
+
+  @property
+  def output_labels(self) -> tuple[str, ...]:
+    """Ordered tuple of output flux names."""
+    return self._output_labels
+
+  @property
+  def variance_epsilon(self) -> jax.Array:
+    """Per-output epsilon added to each ensemble member's predicted variance."""
+    return self._variance_epsilon
+
+  @property
+  def n_ensemble(self) -> int:
+    """Number of ensemble members per output."""
+    return self._n_ensemble
+
   def predict(self, inputs: jax.Array) -> Mapping[str, jax.Array]:
-    """Predicts mean and variance of each flux."""
-    input_dtype = inputs.dtype
+    """Predicts the unnormalised mean and variance of each output flux.
 
-    # Normalize and explicitly cast to f32 for inference.
-    normalized_inputs = transforms.normalize(
-        inputs.astype(jnp.float32),
-        mean=self._input_means,
-        stddev=self._input_stds,
-    )
+    Args:
+      inputs: Unnormalised input features of shape `(..., n_inputs)`, ordered
+        as `self.input_labels`, where `n_inputs == len(self.input_labels)`.
 
-    # Vmap over the output and ensemble axes of the stacked parameters,
-    # giving predictions of shape (n_outputs, n_ensemble, ..., 2).
+    Returns:
+      A mapping from each flux label in `self.output_labels` to a `float64`
+      array of shape `(..., 2)` containing `[mean, variance]` along the
+      trailing axis.
+    """
+    # Vmap over the output axis of the stacked parameters and per-output
+    # statistics, giving predictions of shape (n_outputs, ..., 2).
     predictions = jax.vmap(
-        jax.vmap(
-            lambda params: self._network.apply(
-                {"params": params},
-                normalized_inputs,
-                deterministic=True,
-            ),
-        )
-    )(self._params)
-
-    # Combine the ensemble members
-    mean = jnp.mean(predictions[..., 0], axis=1)  # pyrefly: ignore[bad-index]
-    # Aleatoric uncertainty = mean of the predicted variances
-    aleatoric = jnp.mean(predictions[..., 1], axis=1)  # pyrefly: ignore[bad-index]
-    # Epistemic uncertainty = variance of the predicted means
-    epistemic = jnp.var(predictions[..., 0], axis=1)  # pyrefly: ignore[bad-index]
-    normalized_predictions = jnp.stack([mean, aleatoric + epistemic], axis=-1)
-
-    # Variances have no mean offset and scale with the squared stddev.
-    broadcast_means = jnp.expand_dims(
-        jnp.stack(
-            [self._output_means, jnp.zeros_like(self._output_means)], axis=-1
-        ),
-        axis=tuple(range(1, normalized_predictions.ndim - 1)),
+        self._predict_single_output,
+        in_axes=(None, 0, 0, 0, 0, 0, 0),
+    )(
+        inputs,
+        self._params,
+        self._variance_epsilon,
+        self._input_means,
+        self._input_stds,
+        self._output_means,
+        self._output_stds,
     )
-    broadcast_stds = jnp.expand_dims(
-        jnp.stack([self._output_stds, self._output_stds**2], axis=-1),
-        axis=tuple(range(1, normalized_predictions.ndim - 1)),
-    )
-
-    # Unnormalize and explicitly cast back to original dtype.
-    predictions = transforms.unnormalize(
-        normalized_predictions, mean=broadcast_means, stddev=broadcast_stds
-    ).astype(input_dtype)
 
     return {label: predictions[i] for i, label in enumerate(self.output_labels)}
 
+  def _predict_single_output(
+      self,
+      inputs: jax.Array,
+      params: Mapping[str, Mapping[str, jax.Array]],
+      variance_epsilon: jax.Array,
+      input_mean: jax.Array,
+      input_std: jax.Array,
+      output_mean: jax.Array,
+      output_std: jax.Array,
+  ) -> jax.Array:
+    """Predicts unnormalised [mean, variance] for a single output flux."""
+    # Like the ONNX models, input and output normalisations run in float64
+    # around the float32 network.
+    normalized_inputs = transforms.normalize(
+        inputs, mean=input_mean, stddev=input_std
+    ).astype(jnp.float32)
+
+    # Vmap over the ensemble axis of this output's parameters, giving
+    # predictions of shape (n_ensemble, ..., 2).
+    member_predictions = jax.vmap(
+        lambda p: self._network.apply(
+            {"params": p}, normalized_inputs, deterministic=True
+        )
+    )(params)
+    assert isinstance(member_predictions, jax.Array)
+
+    # Combine the ensemble members
+    member_means = member_predictions[..., 0]
+    mean = jnp.mean(member_means, axis=0)
+    # Aleatoric uncertainty = mean of the predicted variances (plus epsilon)
+    aleatoric = jnp.mean(member_predictions[..., 1], axis=0) + variance_epsilon
+    # Epistemic uncertainty = variance of the predicted means
+    epistemic = jnp.mean(jnp.square(member_means - mean), axis=0)
+
+    mean = transforms.unnormalize(mean, mean=output_mean, stddev=output_std)
+    variance = transforms.unnormalize(
+        aleatoric + epistemic,
+        mean=jnp.zeros_like(output_mean),
+        stddev=output_std**2,
+    )
+    return jnp.stack([mean, variance], axis=-1)
+
   def __hash__(self) -> int:
-    return hash(self.machine)
+    return hash((self.machine, self.version))
 
   def __eq__(self, other: Any) -> bool:
-    return isinstance(other, TGLFNNukaeaModel) and self.machine == other.machine
+    return (
+        isinstance(other, TGLFNNukaeaModel)
+        and self.machine == other.machine
+        and self.version == other.version
+    )
 
   def __setattr__(self, attr, value):
     # pylint: disable=g-doc-args
