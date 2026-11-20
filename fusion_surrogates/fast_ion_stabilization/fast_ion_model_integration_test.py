@@ -58,7 +58,7 @@ class FastIonRegistryTest(parameterized.TestCase):
         )
     )
     self.assertEqual(model.species, 'H')
-    self.assertEqual(model.version, '1')
+    self.assertEqual(model.version, '2')
 
   def test_load_h_model(self):
     model = (

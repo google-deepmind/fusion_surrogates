@@ -19,8 +19,8 @@ import pathlib
 import immutabledict
 
 DEFAULT_MODELS = immutabledict.immutabledict({
-    'H': 'fast_ion_H_v1',
-    'He3': 'fast_ion_He3_v1',
+    'H': 'fast_ion_H_v2',
+    'He3': 'fast_ion_He3_v2',
 })
 
 MODELS = immutabledict.immutabledict({
