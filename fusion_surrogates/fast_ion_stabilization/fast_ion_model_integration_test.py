@@ -28,13 +28,23 @@ _N_FI_OVER_NE = 0.05
 _RLTI_FI = 30.0
 _T_FI_OVER_TE_VALUES = np.array([1.0, 2.0, 5.0, 10.0, 15.0], dtype=np.float32)
 
-_EXPECTED_H_OUTPUTS = np.array(
+_EXPECTED_H_V1_OUTPUTS = np.array(
     [0.7342398, 0.9100813, 1.1069683, 1.0865688, 1.0558544],
     dtype=np.float32,
 )
 
-_EXPECTED_HE3_OUTPUTS = np.array(
+_EXPECTED_HE3_V1_OUTPUTS = np.array(
     [0.1983749, 0.4569806, 0.9586841, 1.2051169, 1.2053574],
+    dtype=np.float32,
+)
+
+_EXPECTED_H_V2_OUTPUTS = np.array(
+    [0.7668223, 0.93504715, 1.1035118, 1.0944724, 1.0771853],
+    dtype=np.float32,
+)
+
+_EXPECTED_HE3_V2_OUTPUTS = np.array(
+    [0.32515442, 0.43193114, 0.9633433, 1.2097101, 1.1997458],
     dtype=np.float32,
 )
 
@@ -91,14 +101,24 @@ class FastIonRegistryTest(parameterized.TestCase):
 
   @parameterized.named_parameters(
       dict(
-          testcase_name='H',
+          testcase_name='H_v1',
           model_name='fast_ion_H_v1',
-          expected=_EXPECTED_H_OUTPUTS,
+          expected=_EXPECTED_H_V1_OUTPUTS,
       ),
       dict(
-          testcase_name='He3',
+          testcase_name='He3_v1',
           model_name='fast_ion_He3_v1',
-          expected=_EXPECTED_HE3_OUTPUTS,
+          expected=_EXPECTED_HE3_V1_OUTPUTS,
+      ),
+      dict(
+          testcase_name='H_v2',
+          model_name='fast_ion_H_v2',
+          expected=_EXPECTED_H_V2_OUTPUTS,
+      ),
+      dict(
+          testcase_name='He3_v2',
+          model_name='fast_ion_He3_v2',
+          expected=_EXPECTED_HE3_V2_OUTPUTS,
       ),
   )
   def test_regression_sweep(self, model_name: str, expected: np.ndarray):

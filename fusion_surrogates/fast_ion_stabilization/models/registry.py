@@ -28,4 +28,8 @@ MODELS = immutabledict.immutabledict({
     'fast_ion_He3_v1': (
         f'{pathlib.Path(__file__).parent}/fast_ion_He3_v1.fistab'
     ),
+    'fast_ion_H_v2': f'{pathlib.Path(__file__).parent}/fast_ion_H_v2.fistab',
+    'fast_ion_He3_v2': (
+        f'{pathlib.Path(__file__).parent}/fast_ion_He3_v2.fistab'
+    ),
 })
