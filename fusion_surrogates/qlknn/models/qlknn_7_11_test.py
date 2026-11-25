@@ -64,7 +64,9 @@ class Qlknn711Test(parameterized.TestCase):
     self.assertEqual(targets.dtype, np.float64)
     preds = model.predict_targets(inputs)
     self.assertEqual(preds.dtype, np.float64)
-    testing.assert_array_almost_equal(preds, targets, decimal=10)
+    # Reference targets were generated in float64 while inference runs in
+    # float32 to match the model weights.
+    testing.assert_allclose(preds, targets, rtol=1e-5, atol=1e-5)
 
   @parameterized.parameters(*_get_test_inputs_and_targets())
   def test_numerical_jitted(self, inputs, targets):
@@ -74,7 +76,37 @@ class Qlknn711Test(parameterized.TestCase):
     targets = jnp.array(targets, dtype=jnp.float64)
     preds = jax.jit(model.predict_targets)(inputs)
     self.assertEqual(preds.dtype, jnp.float64)
-    testing.assert_array_almost_equal(preds, targets, decimal=10)
+    testing.assert_allclose(preds, targets, rtol=1e-5, atol=1e-5)
+
+  def test_float32_compute_with_float64_inputs(self):
+    model = qlknn_model.QLKNNModel.load_default_model()
+    self.assertTrue(jax.config.jax_enable_x64)
+    inputs = jnp.ones((4, model.num_inputs), dtype=jnp.float64)
+
+    for jaxpr in (
+        jax.make_jaxpr(model.predict_targets)(inputs),
+        jax.make_jaxpr(jax.jacfwd(model.predict_targets))(inputs),
+    ):
+      dot_eqns = [
+          eqn for eqn in jaxpr.eqns if eqn.primitive.name == "dot_general"
+      ]
+      self.assertNotEmpty(dot_eqns)
+      for eqn in dot_eqns:
+        self.assertEqual(
+            eqn.params["precision"],
+            (jax.lax.Precision.HIGHEST, jax.lax.Precision.HIGHEST),
+        )
+        for outvar in eqn.outvars:
+          self.assertEqual(outvar.aval.dtype, jnp.float32)
+
+    preds = model.predict(inputs)
+    for flux in preds.values():
+      self.assertEqual(flux.dtype, jnp.float64)
+
+    inputs_f32 = inputs.astype(jnp.float32)
+    preds_f32 = model.predict(inputs_f32)
+    for flux in preds_f32.values():
+      self.assertEqual(flux.dtype, jnp.float32)
 
   @parameterized.parameters(
       registry.MODELS.keys()

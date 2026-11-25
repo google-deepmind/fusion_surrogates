@@ -22,7 +22,7 @@ import abc
 from collections.abc import Mapping
 import dataclasses
 import json
-from typing import Any, Final
+from typing import Any, Final, cast
 
 from absl import logging
 from flax import serialization
@@ -264,13 +264,30 @@ class QLKNNModel:
     Returns:
       the raw model prediction
     """
-    if self._config.normalize_inputs and self._config.stats_data is not None:
-      inputs = transforms.normalize(
-          inputs,
-          mean=self._config.stats_data.input_mean,
-          stddev=self._config.stats_data.input_stddev,
+    # QLKNN was trained with float32 inputs. This ensures inference always uses
+    # float32 rather than float64, which is more expensive to compute and more
+    # precision than the model was trained for.
+    # TODO(b/590512220): The model actually was trained using BF16 matmuls.
+    # Investigate using BF16_BF16_F32 once CPU support is available. Note that
+    # without setting default_matmul_precision('highest'), the matmuls will be
+    # done in TF32 on GPU, causing a numerics discrepancy between GPU and CPU.
+    with jax.default_matmul_precision('highest'), jax.enable_x64(False):
+      inputs = jnp.asarray(inputs, dtype=jnp.float32)
+      if self._config.normalize_inputs and self._config.stats_data is not None:
+        inputs = transforms.normalize(
+            inputs,
+            mean=jnp.asarray(
+                self._config.stats_data.input_mean, dtype=jnp.float32
+            ),
+            stddev=jnp.asarray(
+                self._config.stats_data.input_stddev, dtype=jnp.float32
+            ),
+        )
+      output = self._network.apply(
+          cast(flax_typing.VariableDict, params), inputs
       )
-    return self._network.apply(params, inputs)  # pyrefly: ignore[bad-argument-type, bad-return]
+    assert isinstance(output, jax.Array)
+    return output
 
   def predict_targets(self, inputs: jax.Array) -> jax.Array:
     """Predicts the targets given the inputs.
@@ -284,16 +301,21 @@ class QLKNNModel:
     Returns:
       The unnormalized model predictions
     """
+    output_dtype = jnp.result_type(inputs, jnp.float32)
     outputs = self.predict_with_params(
         jax.tree_util.tree_map(lambda x: x[0], self._params), inputs
     )
     if self._config.normalize_targets and self._config.stats_data is not None:
       outputs = transforms.unnormalize(
           outputs,
-          mean=self._config.stats_data.target_mean,
-          stddev=self._config.stats_data.target_stddev,
+          mean=jnp.asarray(
+              self._config.stats_data.target_mean, dtype=jnp.float32
+          ),
+          stddev=jnp.asarray(
+              self._config.stats_data.target_stddev, dtype=jnp.float32
+          ),
       )
-    return outputs
+    return outputs.astype(output_dtype)
 
   def get_flux_from_targets(
       self, targets: jax.Array, flux_name: str
